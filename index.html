@@ -1,0 +1,1721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BusinessBench — Fast estimates</title>
+<style>
+  :root {
+    --navy: #14273d;
+    --copper: #d99a4e;
+    --copper-dark: color-mix(in srgb, var(--copper) 72%, black);
+    --copper-soft: color-mix(in srgb, var(--copper) 16%, white);
+    --desk: #f1efe9;
+    --border: #e3ddd2;
+    --input: #d9d2c5;
+    --muted: #f5f2ec;
+    --muted-fg: #6b7280;
+    --fg: #1f2937;
+    --radius: .65rem;
+  }
+  * { box-sizing: border-box; border-color: var(--border); }
+  html { font-family: "Segoe UI", system-ui, Arial, sans-serif; }
+  body { margin: 0; background: var(--desk); color: var(--fg); font-size: 14px; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  img { max-width: 100%; }
+  h1, h2, h3 { margin: 0; }
+  p { margin: 0; }
+
+  .field-label { margin-bottom: .4rem; display: block; font-size: .7rem; font-weight: 700; letter-spacing: .02em; color: var(--navy); }
+  .mini-label { margin-bottom: .2rem; display: block; font-size: .58rem; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; color: var(--muted-fg); }
+  .document-label { font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .15em; color: var(--copper-dark); }
+
+  /* ---------- controls ---------- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+    border: 1px solid transparent; border-radius: .55rem; background: var(--navy); color: #fff;
+    padding: .5rem .9rem; font-size: .84rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+    transition: background .15s, opacity .15s;
+  }
+  .btn:hover { background: color-mix(in srgb, var(--navy) 88%, white); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.outline { background: #fff; color: var(--fg); border-color: var(--input); }
+  .btn.outline:hover { background: var(--muted); }
+  .btn.ghost { background: transparent; color: var(--fg); }
+  .btn.ghost:hover { background: rgb(0 0 0 / 6%); }
+  .btn.ghost.onnavy { color: #fff; }
+  .btn.ghost.onnavy:hover { background: rgb(255 255 255 / 12%); }
+  .btn.copper { background: var(--copper); color: var(--navy); font-weight: 700; }
+  .btn.copper:hover { background: color-mix(in srgb, var(--copper) 85%, white); }
+  .btn.white { background: #fff; color: var(--navy); }
+  .btn.white:hover { background: rgb(255 255 255 / 90%); }
+  .btn.danger { background: #c0392b; color: #fff; }
+  .btn.danger:hover { background: #a93226; }
+  .btn.xs { padding: .25rem .55rem; font-size: .74rem; border-radius: .45rem; }
+  .btn.sm { padding: .38rem .7rem; font-size: .78rem; }
+  .btn.lg { padding: .65rem 1.2rem; font-size: .95rem; border-radius: .65rem; }
+  .btn.icon { padding: .45rem; width: 2.3rem; }
+
+  .input, .textarea, .select {
+    width: 100%; border: 1px solid var(--input); border-radius: .5rem; background: #fff;
+    padding: .45rem .65rem; font-size: .86rem; outline: none;
+  }
+  .input:focus, .textarea:focus, .select:focus { border-color: var(--copper); box-shadow: 0 0 0 3px color-mix(in srgb, var(--copper) 25%, transparent); }
+  .input.h10 { height: 2.5rem; }
+  .textarea { min-height: 4.5rem; resize: vertical; font-family: inherit; }
+  .mono { font-family: ui-monospace, Consolas, monospace; }
+
+  /* ---------- layout ---------- */
+  header.appbar {
+    position: sticky; top: 0; z-index: 30; display: flex; height: 64px; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid rgb(0 0 0 / 8%); background: var(--navy); padding: 0 1.25rem; color: #fff;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 15%);
+  }
+  .brand { display: flex; align-items: center; gap: .75rem; }
+  .brand-icon { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: .5rem; background: var(--copper); color: var(--navy); font-size: 1.1rem; }
+  .brand p.name { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+  .brand p.tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .16em; color: rgb(255 255 255 / 50%); }
+  .appbar .actions { display: flex; align-items: center; gap: .4rem; }
+
+  .layout { display: grid; grid-template-columns: 220px minmax(430px, 620px) minmax(500px, 1fr); max-width: 1580px; margin: 0 auto; }
+  @media (max-width: 1180px) { .layout { grid-template-columns: 220px 1fr; } section.preview-wrap { grid-column: 1 / -1; } }
+  @media (max-width: 700px) { .layout { grid-template-columns: 1fr; } aside.sidebar { min-height: 0; border-right: none; border-bottom: 1px solid rgb(0 0 0 / 8%); } }
+
+  aside.sidebar { min-height: calc(100vh - 64px); border-right: 1px solid rgb(0 0 0 / 8%); background: rgb(255 255 255 / 55%); padding: 1rem; }
+  .side-head { margin: 1.2rem 0 .75rem; padding: 0 .5rem; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .16em; color: var(--muted-fg); }
+  .history { display: flex; flex-direction: column; gap: .5rem; }
+  .history-empty { border: 1px dashed var(--input); border-radius: .75rem; background: rgb(255 255 255 / 60%); padding: 1rem; text-align: center; font-size: .75rem; line-height: 1.25rem; color: var(--muted-fg); }
+  .history-item { width: 100%; text-align: left; border: 1px solid var(--border); border-radius: .75rem; background: rgb(255 255 255 / 70%); padding: .7rem; cursor: pointer; transition: background .15s; }
+  .history-item:hover { background: #fff; }
+  .history-item.active { border-color: color-mix(in srgb, var(--copper) 50%, transparent); background: var(--copper-soft); }
+  .history-item .row1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: .25rem; font-size: .72rem; font-weight: 600; }
+  .history-item .pill { border-radius: 999px; background: #fff; padding: .1rem .5rem; font-size: 10px; color: #047857; }
+  .history-item .client { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; font-weight: 600; color: var(--navy); }
+  .history-item .meta { margin-top: .25rem; font-size: .72rem; color: var(--muted-fg); }
+
+  section.editor { border-right: 1px solid rgb(0 0 0 / 8%); background: #fff; padding: 1.5rem; }
+  .editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+  .notice { display: flex; align-items: center; gap: .45rem; margin-bottom: .25rem; font-size: .75rem; font-weight: 600; color: var(--muted-fg); }
+  .notice .dot { width: .55rem; height: .55rem; border-radius: 999px; background: #059669; flex: none; }
+  .notice.busy .dot { background: var(--copper); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .editor-head h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; color: var(--navy); }
+  .qnum-box { width: 10rem; border: 1px solid var(--input); border-radius: .5rem; background: var(--desk); padding: .5rem .75rem; }
+  .qnum-box input { width: 100%; height: 1.75rem; border: 1px solid var(--input); border-radius: .4rem; background: #fff; padding: 0 .4rem; font-weight: 700; }
+
+  .grid2 { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; }
+  .span2 { grid-column: span 2; }
+  @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } .span2 { grid-column: span 1; } }
+
+  .line-card { border: 1px solid var(--border); border-radius: .75rem; background: color-mix(in srgb, var(--desk) 55%, white); padding: .75rem; box-shadow: 0 1px 2px rgb(16 24 40 / 4%); margin-bottom: .75rem; }
+  .line-top { display: flex; align-items: center; gap: .5rem; margin-bottom: .75rem; }
+  .line-no { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; flex: none; border-radius: .4rem; background: var(--navy); font-size: 10px; font-weight: 700; color: #fff; }
+  .line-grid { display: grid; gap: .5rem; grid-template-columns: 1fr .8fr .8fr 1fr; }
+  @media (max-width: 560px) { .line-grid { grid-template-columns: 1fr 1fr; } }
+  .line-foot { display: flex; align-items: center; justify-content: space-between; margin-top: .75rem; border-top: 1px solid var(--border); padding-top: .5rem; }
+  .line-amt { font-family: ui-monospace, Consolas, monospace; font-size: .9rem; font-weight: 700; color: var(--navy); }
+
+  .totals-bar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1.25rem; }
+
+  /* ---------- preview ---------- */
+  section.preview-wrap { background: var(--desk); padding: 2rem; }
+  .quote-paper {
+    margin: 0 auto; min-height: 760px; max-width: 760px; background: #fff; padding: 3rem;
+    box-shadow: 0 10px 35px rgb(15 23 42 / 10%);
+  }
+  .paper-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; border-bottom: 4px solid var(--navy); padding-bottom: 1.75rem; margin-bottom: 3rem; }
+  .paper-logo-row { display: flex; min-height: 3rem; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .paper-logo-row img { max-height: 3.5rem; max-width: 14rem; object-fit: contain; object-position: left; }
+  .paper-logo-row.solo img { max-height: 7rem; max-width: 22rem; }
+  .paper-logo-fallback { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: .5rem; background: var(--navy); color: #fff; font-size: 1.3rem; }
+  .paper-bizname { font-size: 1.125rem; font-weight: 800; color: var(--navy); }
+  .paper-tagline { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .18em; color: var(--copper-dark); }
+  .paper-addr { max-width: 16rem; white-space: pre-line; font-size: .75rem; line-height: 1.25rem; color: var(--muted-fg); }
+  .paper-title { font-size: 2.25rem; font-weight: 800; letter-spacing: -.04em; color: var(--navy); }
+  .paper-qnum { margin-top: .5rem; font-family: ui-monospace, Consolas, monospace; font-size: .875rem; font-weight: 700; color: var(--copper-dark); }
+  .paper-issued { margin-top: .75rem; font-size: .75rem; color: var(--muted-fg); }
+  .paper-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2.5rem; }
+  .paper-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  .paper-table thead tr { background: var(--navy); color: #fff; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
+  .paper-table th { padding: .75rem 1rem; font-weight: 600; }
+  .paper-table th.r, .paper-table td.r { text-align: right; }
+  .paper-table td { padding: 1rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .paper-table .iname { font-weight: 600; color: var(--navy); }
+  .paper-table .idesc { margin-top: .25rem; font-size: .75rem; line-height: 1.25rem; color: var(--muted-fg); white-space: pre-line; }
+  .paper-table td.amt { font-family: ui-monospace, Consolas, monospace; font-weight: 700; }
+  .paper-totals { margin: 1.75rem 0 0 auto; width: 100%; max-width: 280px; display: flex; flex-direction: column; gap: .5rem; font-size: .875rem; }
+  .paper-totals .row { display: flex; justify-content: space-between; color: var(--muted-fg); }
+  .paper-totals .grand { margin-top: .75rem; display: flex; justify-content: space-between; border-top: 2px solid var(--navy); padding-top: .75rem; font-size: 1.125rem; font-weight: 800; color: var(--navy); }
+  .paper-thanks { margin-top: 3.5rem; border-radius: .5rem; background: var(--copper-soft); padding: 1.25rem; font-size: .75rem; line-height: 1.25rem; color: var(--navy); }
+  .paper-thanks .lead { font-weight: 700; margin-bottom: .25rem; }
+  .paper-thanks .body { white-space: pre-line; }
+
+  /* ---------- dialogs ---------- */
+  dialog { border: none; border-radius: 1rem; padding: 0; max-width: 660px; width: calc(100vw - 2rem); max-height: 88vh; box-shadow: 0 25px 60px rgb(15 23 42 / 25%); }
+  dialog::backdrop { background: rgb(15 23 42 / 45%); }
+  .dlg-inner { padding: 1.5rem; overflow-y: auto; max-height: 88vh; }
+  .dlg-head h2 { font-size: 1.15rem; font-weight: 700; color: var(--navy); }
+  .dlg-head p { margin-top: .25rem; font-size: .8rem; color: var(--muted-fg); }
+  .dlg-close { position: absolute; top: .9rem; right: .9rem; border: none; background: transparent; font-size: 1.1rem; cursor: pointer; color: var(--muted-fg); padding: .25rem .5rem; border-radius: .4rem; }
+  .dlg-close:hover { background: var(--muted); }
+  .dlg-foot { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1.25rem; }
+
+  .tabs { display: flex; gap: .25rem; margin: 1rem 0 .25rem; border: 1px solid var(--border); border-radius: .6rem; background: var(--muted); padding: .25rem; }
+  .tabs button { flex: 1; border: none; border-radius: .45rem; background: transparent; padding: .45rem; font-size: .8rem; font-weight: 600; cursor: pointer; color: var(--muted-fg); }
+  .tabs button.active { background: #fff; color: var(--navy); box-shadow: 0 1px 2px rgb(0 0 0 / 8%); }
+  .tabpane { padding-top: .9rem; }
+
+  .color-row { display: grid; grid-template-columns: 48px 1fr 120px; align-items: center; gap: .75rem; border: 1px solid var(--border); border-radius: .75rem; padding: .75rem; margin-bottom: .75rem; }
+  .color-row input[type="color"] { height: 2.5rem; width: 3rem; cursor: pointer; border: 1px solid var(--input); border-radius: .4rem; background: transparent; padding: 2px; }
+  .color-row .lbl { font-weight: 600; }
+
+  .logo-drop { border: 1px dashed var(--input); border-radius: .75rem; background: color-mix(in srgb, var(--muted) 40%, white); padding: 1.5rem; text-align: center; }
+  .logo-drop img.current { display: block; margin: 0 auto 1rem; max-height: 6rem; object-fit: contain; }
+  .logo-drop .big { font-weight: 600; margin-bottom: .25rem; }
+  .logo-drop .hint { font-size: .75rem; color: var(--muted-fg); margin-bottom: 1rem; }
+
+  .list-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; border: 1px solid var(--border); border-radius: .7rem; background: #fff; padding: .6rem .8rem; margin-bottom: .5rem; }
+  .list-row .info { min-width: 0; }
+  .list-row .nm { font-weight: 600; color: var(--navy); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .list-row .sub { font-size: .74rem; color: var(--muted-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .list-row .acts { display: flex; gap: .3rem; flex: none; }
+
+  .storage-banner { display: none; align-items: center; gap: .75rem; background: #fff8ec; border-bottom: 1px solid #efdcbb; padding: .55rem 1.25rem; font-size: .8rem; color: #7a5b1e; }
+  .storage-banner.show { display: flex; }
+  .storage-banner .grow { flex: 1; }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+
+  .toast {
+    position: fixed; top: 78px; left: 50%; transform: translateX(-50%) translateY(-8px); z-index: 100;
+    padding: .75rem 1.4rem; border-radius: .7rem; font-weight: 700; font-size: .95rem; color: #fff;
+    box-shadow: 0 10px 30px rgb(15 23 42 / 30%); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+    max-width: calc(100vw - 2rem); text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.ok { background: #0d7a4f; }
+  .toast.err { background: #c0392b; }
+  @media print { .toast { display: none !important; } }
+
+  /* ---------- print ---------- */
+  @media print {
+    @page { size: letter; margin: .35in; }
+    body { background: #fff; }
+    header.appbar, aside.sidebar, section.editor, .storage-banner { display: none !important; }
+    .layout { display: block; max-width: none; }
+    section.preview-wrap { padding: 0; background: #fff; }
+    .quote-paper { min-height: 0; max-width: none; box-shadow: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="brand">
+    <div class="brand-icon">▤</div>
+    <div>
+      <p class="name">BusinessBench</p>
+      <p class="tag">Fast estimates</p>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn ghost onnavy" id="btnCustomersTop">👥 Customers</button>
+    <button class="btn ghost onnavy" id="btnCatalogTop">📚 Saved items</button>
+    <button class="btn ghost onnavy icon" id="btnSettings" title="Business, appearance & data settings">⚙</button>
+    <button class="btn ghost onnavy icon" id="btnCloud" title="Google Drive backup">☁</button>
+    <button class="btn ghost onnavy" id="btnSaveOutput" title="Save this quote into your Outputs folder">📁 <span>Save to Outputs</span></button>
+    <button class="btn white" id="btnPrint">🖨 <span>Print / PDF</span></button>
+  </div>
+</header>
+
+<div class="toast" id="toast"></div>
+
+<div class="storage-banner" id="storageBanner">
+  <span>⚠</span>
+  <span class="grow" id="storageBannerText">Your data file isn’t connected yet.</span>
+  <button class="btn sm copper" id="btnReconnect">Reconnect data file</button>
+  <button class="btn sm ghost" id="btnDismissBanner">Dismiss</button>
+</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <button class="btn outline" id="btnNewQuote" style="width:100%; justify-content:flex-start; margin-bottom:1rem;">＋ New quote</button>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem;">
+      <button class="btn outline sm" id="btnCustomersSide">👥 Customers</button>
+      <button class="btn outline sm" id="btnCatalogSide">📚 Items</button>
+    </div>
+    <p class="side-head">Recent quotes</p>
+    <div class="history" id="historyList"></div>
+  </aside>
+
+  <section class="editor">
+    <div class="editor-head">
+      <div>
+        <div class="notice" id="notice"><span class="dot"></span><span id="noticeText">Ready</span></div>
+        <h1>Build your quote</h1>
+      </div>
+      <label class="qnum-box">
+        <span class="mini-label">Quote number</span>
+        <input id="fQuoteNumber" class="mono" aria-label="Quote number">
+      </label>
+    </div>
+
+    <div class="grid2" style="margin-bottom:1.5rem;">
+      <div class="span2">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.4rem;">
+          <span class="field-label" style="margin-bottom:0;">Customer or company</span>
+          <button class="btn ghost xs" id="btnPhonebook">👥 Phone book</button>
+        </div>
+        <select class="select" id="customerPicker" style="margin-bottom:.5rem;">
+          <option value="">Choose a saved customer…</option>
+        </select>
+        <input class="input h10" id="fClientName" placeholder="Or type a new customer">
+      </div>
+      <label><span class="field-label">Email</span><input type="email" class="input h10" id="fClientEmail" placeholder="customer@email.com"></label>
+      <label><span class="field-label">Phone</span><input class="input h10" id="fClientPhone" placeholder="Phone number"></label>
+      <label class="span2"><span class="field-label">Customer address</span><input class="input h10" id="fClientAddress" placeholder="Street, city, state, ZIP"></label>
+      <label class="span2"><span class="field-label">Project / job</span><input class="input h10" id="fProjectName" placeholder="Short project name"></label>
+      <label><span class="field-label">Issue date</span><input type="date" class="input h10" id="fIssueDate"></label>
+      <label><span class="field-label">Valid until</span><input type="date" class="input h10" id="fValidUntil"></label>
+    </div>
+
+    <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:.75rem; margin-bottom:.75rem;">
+      <div>
+        <h2 style="font-size:1rem; font-weight:700; color:var(--navy);">Line items</h2>
+        <p style="font-size:.75rem; color:var(--muted-fg);">Save Item adds a line to your Saved Items list — if it differs from every saved item, it's saved as a new one.</p>
+      </div>
+      <button class="btn outline sm" id="btnCatalogInline">📚 Manage saved items</button>
+    </div>
+    <div id="lineItems"></div>
+    <datalist id="categoryList"></datalist>
+    <button class="btn outline" id="btnAddLine" style="width:100%; border-style:dashed; margin-top:.25rem;">＋ Add line item</button>
+
+    <div style="display:grid; grid-template-columns:1fr 150px; gap:1rem; margin-top:1.5rem;">
+      <label><span class="field-label">Notes / terms</span><textarea class="textarea" id="fNotes" placeholder="Scope details, scheduling, or terms…"></textarea></label>
+      <label><span class="field-label">Tax rate</span>
+        <div style="position:relative;">
+          <input type="number" min="0" step="0.1" class="input" id="fTaxRate" style="padding-right:2rem;">
+          <span style="position:absolute; right:.75rem; top:.45rem; font-size:.86rem; color:var(--muted-fg);">%</span>
+        </div>
+      </label>
+    </div>
+
+    <div class="totals-bar">
+      <p style="font-size:.75rem; color:var(--muted-fg);">Total <span id="totalInline" class="mono" style="margin-left:.25rem; font-weight:700; color:var(--navy);">$0.00</span></p>
+      <button class="btn copper lg" id="btnSaveQuote">💾 Save quote</button>
+    </div>
+  </section>
+
+  <section class="preview-wrap">
+    <div class="quote-paper" id="quotePaper"></div>
+  </section>
+</div>
+
+<!-- ============ Settings dialog ============ -->
+<dialog id="dlgSettings">
+  <div class="dlg-inner" style="position:relative;">
+    <button class="dlg-close" data-close="dlgSettings">✕</button>
+    <div class="dlg-head">
+      <h2>Business &amp; appearance</h2>
+      <p>These details and colors are reused on every quote. Everything is stored on this computer.</p>
+    </div>
+    <div class="tabs" id="settingsTabs">
+      <button data-tab="business" class="active">💼 Business</button>
+      <button data-tab="appearance">🎨 Colors</button>
+      <button data-tab="logo">🖼 Logo</button>
+      <button data-tab="data">🗄 Your data</button>
+    </div>
+
+    <div class="tabpane" data-pane="business">
+      <label style="display:flex; align-items:center; gap:.6rem; border:1px solid var(--border); border-radius:.7rem; background:var(--muted); padding:.7rem .9rem; margin-bottom:1rem; cursor:pointer;">
+        <input type="checkbox" id="sShowBusinessText" style="width:1.1rem; height:1.1rem; accent-color:var(--copper);">
+        <span>
+          <span style="font-weight:600; display:block;">Show business name &amp; tagline on the quote</span>
+          <span style="font-size:.74rem; color:var(--muted-fg);">Turn this off to hide the text — your logo takes over the whole header instead.</span>
+        </span>
+      </label>
+      <div class="grid2">
+        <label class="span2"><span class="field-label">Business name</span><input class="input" id="sBusinessName" placeholder="Leave blank to show only your logo"></label>
+        <label><span class="field-label">Tagline or trade</span><input class="input" id="sTagline"></label>
+        <label><span class="field-label">Default quote prefix</span><input class="input" id="sQuotePrefix" maxlength="8"></label>
+        <label><span class="field-label">Email</span><input type="email" class="input" id="sEmail"></label>
+        <label><span class="field-label">Phone</span><input class="input" id="sPhone"></label>
+        <label class="span2"><span class="field-label">Address</span><textarea class="textarea" id="sAddress"></textarea></label>
+        <label class="span2"><span class="field-label">Default terms / note</span><textarea class="textarea" id="sDefaultTerms"></textarea></label>
+      </div>
+    </div>
+
+    <div class="tabpane" data-pane="appearance" hidden>
+      <p style="font-size:.75rem; color:var(--muted-fg); margin-bottom:1rem;">Changes apply to the application and printed quotes after you save.</p>
+      <div class="color-row"><input type="color" id="sPrimaryColor"><span class="lbl">Primary color</span><input class="input mono" id="sPrimaryColorText"></div>
+      <div class="color-row"><input type="color" id="sAccentColor"><span class="lbl">Accent color</span><input class="input mono" id="sAccentColorText"></div>
+      <div class="color-row"><input type="color" id="sBackgroundColor"><span class="lbl">Background color</span><input class="input mono" id="sBackgroundColorText"></div>
+      <button class="btn outline" id="btnResetColors">🎨 Restore original colors</button>
+    </div>
+
+    <div class="tabpane" data-pane="logo" hidden>
+      <div class="logo-drop">
+        <img class="current" id="logoPreview" alt="Current business logo" hidden>
+        <div id="logoPlaceholder" style="font-size:2rem; margin-bottom:.5rem;">🖼</div>
+        <p class="big">Business logo</p>
+        <p class="hint">PNG, JPG, or WebP. It replaces the briefcase on the quote and is saved as soon as you choose it. Maximum size: 4 MB.</p>
+        <input type="file" id="logoFile" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" style="display:block; margin:0 auto; max-width:100%;">
+        <button class="btn danger sm" id="btnRemoveLogo" style="margin-top:1rem;" hidden>🗑 Remove logo</button>
+      </div>
+    </div>
+
+    <div class="tabpane" data-pane="data" hidden>
+      <p style="font-size:.8rem; line-height:1.35rem; color:var(--muted-fg); margin-bottom:1rem;">
+        BusinessBench saves everything automatically on this computer, in this browser. To make your data extra safe
+        (and to survive things like clearing browser history), connect a <b>data file</b>: BusinessBench will then also
+        write every change straight into a file in a folder you choose.
+      </p>
+      <div class="list-row">
+        <div class="info">
+          <p class="nm">Data file</p>
+          <p class="sub" id="dataFileStatus">Not connected</p>
+        </div>
+        <div class="acts">
+          <button class="btn sm copper" id="btnLinkFile">Choose data file…</button>
+          <button class="btn sm outline" id="btnUnlinkFile" hidden>Disconnect</button>
+        </div>
+      </div>
+      <div class="list-row">
+        <div class="info">
+          <p class="nm">Outputs folder</p>
+          <p class="sub" id="outputsStatus">Not connected</p>
+        </div>
+        <div class="acts">
+          <button class="btn sm copper" id="btnLinkOutputs">Choose folder…</button>
+          <button class="btn sm outline" id="btnUnlinkOutputs" hidden>Disconnect</button>
+        </div>
+      </div>
+      <p style="font-size:.72rem; color:var(--muted-fg); margin-top:.25rem; margin-bottom:.5rem;">
+        “Save to Outputs” drops a finished copy of the current quote in this folder, named
+        <b>Project name – Quote number</b>. Pick a folder inside your Google Drive to get automatic cloud copies.
+      </p>
+      <hr class="divider">
+      <div class="list-row" style="align-items:flex-start;">
+        <div class="info" style="flex:1;">
+          <p class="nm">Google Drive (cloud backup)</p>
+          <p class="sub" id="driveStatus">Not connected</p>
+          <label class="f" style="display:block; margin-top:.6rem;"><span class="field-label">Google OAuth Client ID</span>
+            <input class="input" id="sDriveClientId" placeholder="xxxx.apps.googleusercontent.com"></label>
+          <label style="display:flex; align-items:center; gap:.5rem; margin-top:.6rem; font-size:.8rem; cursor:pointer;">
+            <input type="checkbox" id="sDriveAuto" style="width:1rem; height:1rem; accent-color:var(--copper);">
+            Auto-back up to Drive whenever anything changes
+          </label>
+          <p style="font-size:.72rem; color:var(--muted-fg); margin-top:.6rem; line-height:1.1rem;" id="driveHint">
+            Uses the same (free) Google Client ID as your other apps — paste it, click Connect, and BusinessBench keeps
+            a <b>BusinessBench</b> folder in your Drive holding your data file, with every saved quote in an
+            <b>Outputs</b> subfolder. It can only see files it creates, never the rest of your Drive.
+          </p>
+        </div>
+        <div class="acts" style="flex-direction:column;">
+          <button class="btn sm copper" id="btnDriveConnect">Connect &amp; back up</button>
+        </div>
+      </div>
+      <hr class="divider">
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+        <button class="btn outline sm" id="btnExport">⬇ Download backup</button>
+        <button class="btn outline sm" id="btnImport">⬆ Restore from backup…</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+      <p style="font-size:.72rem; color:var(--muted-fg); margin-top:.75rem;">A backup is a single file holding all your quotes, customers, saved items, settings, and logo.</p>
+    </div>
+
+    <div class="dlg-foot"><button class="btn" id="btnSaveSettings">💾 Save settings</button></div>
+  </div>
+</dialog>
+
+<!-- ============ Customers dialog ============ -->
+<dialog id="dlgCustomers">
+  <div class="dlg-inner" style="position:relative;">
+    <button class="dlg-close" data-close="dlgCustomers">✕</button>
+    <div class="dlg-head">
+      <h2>Customer phone book</h2>
+      <p>Save customers once and reuse them on any quote.</p>
+    </div>
+    <div class="grid2" style="margin:1rem 0;">
+      <label><span class="field-label">Name</span><input class="input" id="cName"></label>
+      <label><span class="field-label">Email</span><input class="input" id="cEmail"></label>
+      <label><span class="field-label">Phone</span><input class="input" id="cPhone"></label>
+      <label><span class="field-label">Address</span><input class="input" id="cAddress"></label>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:.5rem; margin-bottom:1rem;">
+      <button class="btn outline sm" id="btnClearCustomer" hidden>Cancel edit</button>
+      <button class="btn sm" id="btnSaveCustomer">💾 Save customer</button>
+    </div>
+    <div id="customerList"></div>
+  </div>
+</dialog>
+
+<!-- ============ Catalog dialog ============ -->
+<dialog id="dlgCatalog">
+  <div class="dlg-inner" style="position:relative;">
+    <button class="dlg-close" data-close="dlgCatalog">✕</button>
+    <div class="dlg-head">
+      <h2>Saved items</h2>
+      <p>Your price list — services and products you quote often.</p>
+    </div>
+    <div class="grid2" style="margin:1rem 0;">
+      <label><span class="field-label">Name</span><input class="input" id="iName"></label>
+      <label><span class="field-label">Category</span><input class="input" id="iCategory" list="categoryList"></label>
+      <label class="span2"><span class="field-label">Description</span><textarea class="textarea" id="iDescription"></textarea></label>
+      <label><span class="field-label">Unit</span><input class="input" id="iUnit"></label>
+      <label><span class="field-label">Rate</span><input type="number" min="0" step="0.01" class="input" id="iRate"></label>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:.5rem; margin-bottom:1rem;">
+      <button class="btn outline sm" id="btnClearCatalog" hidden>Cancel edit</button>
+      <button class="btn sm" id="btnSaveCatalog">💾 Save item</button>
+    </div>
+    <div id="catalogList"></div>
+  </div>
+</dialog>
+
+<script>
+'use strict';
+
+/* =================== helpers =================== */
+const $ = (id) => document.getElementById(id);
+const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+function isoDate(offsetDays = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+function displayDate(value) {
+  if (!value) return '—';
+  const date = new Date(`${value}T12:00:00`);
+  return isNaN(date) ? value : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function cleanColor(value, fallback) {
+  return /^#[0-9a-fA-F]{6}$/.test(String(value ?? '')) ? String(value).toLowerCase() : fallback;
+}
+
+/* =================== data model =================== */
+const defaultSettings = {
+  businessName: 'YOUR BUSINESS',
+  tagline: 'Professional services',
+  email: '', phone: '', address: '',
+  defaultTerms: 'This quote outlines the proposed work and pricing. Please reach out with any questions or requested changes.',
+  quotePrefix: 'QT',
+  primaryColor: '#14273d', accentColor: '#d99a4e', backgroundColor: '#f1efe9',
+  logoDataUrl: '',
+  showBusinessText: true,
+  driveClientId: '',
+  driveAutoBackup: false,
+};
+
+function freshData() {
+  return { app: 'BusinessBench', version: 1, updatedAt: new Date().toISOString(), settings: { ...defaultSettings }, customers: [], catalog: [], quotes: [], nextSequence: 1001 };
+}
+function blankLine() {
+  return { id: uuid(), catalogId: '', name: '', description: '', category: 'General', unit: 'each', quantity: 1, rate: 0 };
+}
+function freshQuote(sequence, settings) {
+  return {
+    id: '', sequence,
+    quoteNumber: `${settings.quotePrefix}-${String(sequence).padStart(4, '0')}`,
+    status: 'Draft', customerId: '',
+    clientName: '', clientEmail: '', clientPhone: '', clientAddress: '',
+    projectName: '', issueDate: isoDate(), validUntil: isoDate(30),
+    notes: settings.defaultTerms, taxRate: 0, items: [blankLine()],
+  };
+}
+
+let db = freshData();
+let quote = freshQuote(1001, db.settings);
+let editingCustomerId = '';
+let editingCatalogId = '';
+
+/* =================== persistence =================== */
+const LS_KEY = 'quotebench-data-v1';
+let fileHandle = null;          // FileSystemFileHandle when a data file is linked
+let handleNeedsPermission = false;
+let saveTimer = null;
+let fileWriteFailed = false;
+
+function lsAvailable() {
+  try { localStorage.setItem('__qb_test', '1'); localStorage.removeItem('__qb_test'); return true; } catch { return false; }
+}
+const hasLocalStorage = lsAvailable();
+
+function normalizeData(raw) {
+  if (!raw || typeof raw !== 'object' || (raw.app !== 'BusinessBench' && raw.app !== 'QuoteBench')) return null;
+  const data = freshData();
+  data.settings = { ...defaultSettings, ...(raw.settings || {}) };
+  data.customers = Array.isArray(raw.customers) ? raw.customers : [];
+  data.catalog = Array.isArray(raw.catalog) ? raw.catalog : [];
+  data.quotes = Array.isArray(raw.quotes) ? raw.quotes : [];
+  data.nextSequence = Number(raw.nextSequence) || 1001;
+  data.updatedAt = String(raw.updatedAt || data.updatedAt);
+  return data;
+}
+
+function persist(reason) {
+  db.updatedAt = new Date().toISOString();
+  if (hasLocalStorage) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch (err) { console.warn('localStorage save failed', err); }
+  }
+  scheduleFileWrite();
+  if (typeof scheduleDriveBackup === 'function') scheduleDriveBackup();
+  if (reason) setNotice(reason);
+}
+
+function scheduleFileWrite() {
+  if (!fileHandle || handleNeedsPermission) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(writeDataFile, 400);
+}
+
+async function writeDataFile() {
+  if (!fileHandle) return;
+  try {
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(db, null, 2));
+    await writable.close();
+    fileWriteFailed = false;
+    updateStorageUi();
+  } catch (err) {
+    console.warn('Data file write failed', err);
+    fileWriteFailed = true;
+    if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+      handleNeedsPermission = true;
+    }
+    updateStorageUi();
+  }
+}
+
+/* ---- IndexedDB for remembering the file handle ---- */
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('quotebench', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('kv');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+async function idbSet(key, value) {
+  try {
+    const database = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = database.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(value, key);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) { console.warn('idbSet failed', err); }
+}
+async function idbGet(key) {
+  try {
+    const database = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx = database.transaction('kv', 'readonly');
+      const request = tx.objectStore('kv').get(key);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (err) { console.warn('idbGet failed', err); return undefined; }
+}
+async function idbDelete(key) {
+  try {
+    const database = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = database.transaction('kv', 'readwrite');
+      tx.objectStore('kv').delete(key);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) { console.warn('idbDelete failed', err); }
+}
+
+const supportsFilePicker = typeof window.showSaveFilePicker === 'function';
+
+async function linkDataFile() {
+  if (!supportsFilePicker) {
+    alert('This browser does not support connecting a data file. Your work still auto-saves in the browser — use “Download backup” for a file copy.');
+    return;
+  }
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: 'BusinessBench-data.json',
+      types: [{ description: 'BusinessBench data', accept: { 'application/json': ['.json'] } }],
+    });
+    // If the chosen file already has BusinessBench data, offer to load it.
+    let incoming = null;
+    try {
+      const file = await handle.getFile();
+      const text = await file.text();
+      if (text.trim()) incoming = normalizeData(JSON.parse(text));
+    } catch { /* new/empty file */ }
+    if (incoming && incoming.updatedAt !== db.updatedAt) {
+      const useFile = confirm('That file already contains BusinessBench data.\n\nOK = load the data from the file (replaces what is on screen)\nCancel = keep what is on screen and overwrite the file');
+      if (useFile) { adoptData(incoming); }
+    }
+    fileHandle = handle;
+    handleNeedsPermission = false;
+    fileWriteFailed = false;
+    await idbSet('dataFileHandle', handle);
+    await writeDataFile();
+    persist('Data file connected');
+    updateStorageUi();
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    console.warn('linkDataFile failed', err);
+    alert('Could not connect the data file: ' + (err && err.message ? err.message : err));
+  }
+}
+
+async function unlinkDataFile() {
+  fileHandle = null;
+  handleNeedsPermission = false;
+  await idbDelete('dataFileHandle');
+  updateStorageUi();
+  setNotice('Data file disconnected — still auto-saving in this browser');
+}
+
+async function reconnectDataFile() {
+  if (!fileHandle) return;
+  try {
+    let permission = await fileHandle.queryPermission({ mode: 'readwrite' });
+    if (permission !== 'granted') permission = await fileHandle.requestPermission({ mode: 'readwrite' });
+    if (permission !== 'granted') { setNotice('Data file permission was not granted'); return; }
+    handleNeedsPermission = false;
+    // Load the file if it is newer than what we have.
+    try {
+      const file = await fileHandle.getFile();
+      const incoming = normalizeData(JSON.parse(await file.text()));
+      if (incoming && incoming.updatedAt > db.updatedAt) adoptData(incoming);
+    } catch { /* keep current */ }
+    await writeDataFile();
+    updateStorageUi();
+    setNotice('Data file reconnected');
+  } catch (err) {
+    console.warn('reconnectDataFile failed', err);
+    setNotice('Could not reconnect the data file');
+  }
+}
+
+/* ---- outputs folder ---- */
+let outputsHandle = null;
+
+function sanitizeFileName(value) {
+  return String(value).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Quote';
+}
+function quoteFileBase() {
+  const project = quote.projectName.trim() || quote.clientName.trim() || 'Quote';
+  return sanitizeFileName(`${project} - ${quote.quoteNumber.trim() || 'draft'}`);
+}
+
+function buildQuoteDocument(title) {
+  const css = document.querySelector('style').textContent;
+  const settings = db.settings;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(title)}</title>
+<style>${css}
+:root { --navy: ${settings.primaryColor}; --copper: ${settings.accentColor}; --desk: ${settings.backgroundColor}; }
+body { background: #fff; padding: 1.5rem 0; }
+.quote-paper { box-shadow: none; }
+@media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+<div class="quote-paper">${$('quotePaper').innerHTML}</div>
+</body>
+</html>`;
+}
+
+async function chooseOutputsFolder() {
+  if (typeof window.showDirectoryPicker !== 'function') {
+    alert('This browser does not support choosing an outputs folder. Use Print / PDF and pick the folder in the save dialog instead.');
+    return false;
+  }
+  try {
+    outputsHandle = await window.showDirectoryPicker({ id: 'quotebench-outputs', mode: 'readwrite' });
+    await idbSet('outputsDirHandle', outputsHandle);
+    updateOutputsUi();
+    toast(`Outputs folder connected: ${outputsHandle.name} ✓`);
+    return true;
+  } catch (err) {
+    if (err && err.name === 'AbortError') return false;
+    console.warn('chooseOutputsFolder failed', err);
+    alert('Could not connect that folder: ' + (err && err.message ? err.message : err));
+    return false;
+  }
+}
+
+async function unlinkOutputsFolder() {
+  outputsHandle = null;
+  await idbDelete('outputsDirHandle');
+  updateOutputsUi();
+  setNotice('Outputs folder disconnected');
+}
+
+async function saveToOutputs() {
+  const base = quoteFileBase();
+  const name = `${base}.html`;
+  const doc = buildQuoteDocument(base);
+  const destinations = [];
+
+  // 1) Local outputs folder
+  try {
+    if (!outputsHandle && typeof window.showDirectoryPicker === 'function' && !driveConfigured()) {
+      await chooseOutputsFolder();
+    }
+    if (outputsHandle) {
+      let permission = await outputsHandle.queryPermission({ mode: 'readwrite' });
+      if (permission !== 'granted') permission = await outputsHandle.requestPermission({ mode: 'readwrite' });
+      if (permission === 'granted') {
+        const handle = await outputsHandle.getFileHandle(name, { create: true });
+        const writable = await handle.createWritable();
+        await writable.write(doc);
+        await writable.close();
+        destinations.push(outputsHandle.name);
+      } else {
+        toast('Outputs folder permission was not granted', 'err');
+      }
+    }
+  } catch (err) {
+    if (!(err && err.name === 'AbortError')) {
+      console.error('local output save failed', err);
+      toast('Could not save to the local Outputs folder: ' + (err && err.message ? err.message : err), 'err');
+    }
+  }
+
+  // 2) Google Drive outputs
+  if (driveConfigured()) {
+    try {
+      const token = await ensureGToken();
+      const folders = await driveFolders(token);
+      await driveUpload(token, folders.outputs, name, doc, 'text/html');
+      destinations.push('Google Drive');
+      setDriveState('ok');
+    } catch (err) {
+      console.error('Drive output upload failed', err);
+      setDriveState('err', err.message);
+      toast('Google Drive: ' + err.message, 'err');
+    }
+  }
+
+  if (destinations.length) toast(`Saved “${name}” to ${destinations.join(' + ')} ✓`);
+  else if (!outputsHandle && !driveConfigured()) toast('Choose an Outputs folder or set up Google Drive first (gear → Your data)', 'err');
+}
+
+/* =================== Google Drive backup (via the user's own OAuth Client ID) =================== */
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+let gToken = null, gTokenTime = 0;
+let driveFolderIdCache = null, driveOutputsIdCache = null;
+let driveBackupTimer = null, driveState = 'off';
+
+function driveConfigured() { return Boolean((db.settings.driveClientId || '').trim()); }
+function gTokenValid() { return gToken && Date.now() - gTokenTime < 45 * 60 * 1000; }
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const el = document.createElement('script');
+    el.src = src; el.onload = resolve; el.onerror = () => reject(new Error('Could not load ' + src));
+    document.head.appendChild(el);
+  });
+}
+
+async function ensureGToken() {
+  if (gTokenValid()) return gToken;
+  const cid = (db.settings.driveClientId || '').trim();
+  if (!cid) throw new Error('Add your Google Client ID first (gear → Your data)');
+  if (location.protocol === 'file:') {
+    throw new Error('Google sign-in only works when BusinessBench is opened from its web address (e.g. your github.io copy), not from a double-clicked file');
+  }
+  await loadScript('https://accounts.google.com/gsi/client');
+  const token = await new Promise((resolve, reject) => {
+    const tc = google.accounts.oauth2.initTokenClient({
+      client_id: cid, scope: DRIVE_SCOPE,
+      callback: (t) => t.access_token ? resolve(t.access_token) : reject(new Error(t.error || 'Google sign-in failed')),
+      error_callback: (e) => reject(new Error((e && e.message) || 'Google sign-in was closed')),
+    });
+    tc.requestAccessToken();
+  });
+  gToken = token; gTokenTime = Date.now();
+  return token;
+}
+
+async function driveApi(path, token, opts) {
+  const response = await fetch('https://www.googleapis.com/drive/v3/' + path, {
+    ...(opts || {}), headers: { Authorization: 'Bearer ' + token, ...((opts && opts.headers) || {}) },
+  });
+  if (!response.ok) throw new Error('Drive error ' + response.status);
+  return response.json();
+}
+
+async function driveEnsureFolder(token, name, parentId) {
+  const parentClause = parentId ? ` and '${parentId}' in parents` : '';
+  const q = encodeURIComponent(`name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentClause}`);
+  const found = await driveApi(`files?q=${q}&fields=files(id,name)`, token);
+  if (found.files && found.files.length) return found.files[0].id;
+  const created = await driveApi('files', token, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', ...(parentId ? { parents: [parentId] } : {}) }),
+  });
+  return created.id;
+}
+
+async function driveFolders(token) {
+  if (!driveFolderIdCache) driveFolderIdCache = await driveEnsureFolder(token, 'BusinessBench');
+  if (!driveOutputsIdCache) driveOutputsIdCache = await driveEnsureFolder(token, 'Outputs', driveFolderIdCache);
+  return { root: driveFolderIdCache, outputs: driveOutputsIdCache };
+}
+
+async function driveFindIn(token, folderId, name) {
+  const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and '${folderId}' in parents and trashed=false`);
+  const found = await driveApi(`files?q=${q}&fields=files(id,name,modifiedTime)`, token);
+  return (found.files && found.files[0]) || null;
+}
+
+async function driveUpload(token, folderId, name, content, mime) {
+  const existing = await driveFindIn(token, folderId, name);
+  const boundary = '----bb' + Math.random().toString(36).slice(2);
+  const meta = existing ? { name } : { name, parents: [folderId] };
+  const body = new Blob([
+    '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n',
+    '--' + boundary + '\r\nContent-Type: ' + mime + '\r\n\r\n', content, '\r\n--' + boundary + '--',
+  ]);
+  const url = 'https://www.googleapis.com/upload/drive/v3/files' + (existing ? '/' + existing.id : '') + '?uploadType=multipart';
+  const response = await fetch(url, {
+    method: existing ? 'PATCH' : 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'multipart/related; boundary=' + boundary },
+    body,
+  });
+  if (!response.ok) throw new Error('Drive upload failed (' + response.status + ')');
+  return response.json();
+}
+
+async function driveBackupData(token) {
+  const folders = await driveFolders(token);
+  await driveUpload(token, folders.root, 'BusinessBench-data.json', JSON.stringify(db, null, 2), 'application/json');
+}
+
+async function driveConnectAndBackup() {
+  try {
+    db.settings.driveClientId = $('sDriveClientId').value.trim();
+    setDriveState('pending');
+    const token = await ensureGToken();
+    const folders = await driveFolders(token);
+    // If Drive holds a newer copy of the data (e.g. saved from another device), offer to load it.
+    const remoteFile = await driveFindIn(token, folders.root, 'BusinessBench-data.json');
+    if (remoteFile) {
+      try {
+        const raw = await fetch('https://www.googleapis.com/drive/v3/files/' + remoteFile.id + '?alt=media', { headers: { Authorization: 'Bearer ' + token } });
+        if (raw.ok) {
+          const incoming = normalizeData(await raw.json());
+          if (incoming && incoming.updatedAt > db.updatedAt &&
+              confirm('Your Google Drive holds a newer BusinessBench backup.\n\nOK = load the Drive copy (replaces what is on screen)\nCancel = keep what is on screen and overwrite the Drive copy')) {
+            const clientId = db.settings.driveClientId;
+            adoptData(incoming);
+            db.settings.driveClientId = db.settings.driveClientId || clientId;
+          }
+        }
+      } catch (err) { console.warn('Could not read Drive backup', err); }
+    }
+    await driveBackupData(token);
+    persist();
+    setDriveState('ok');
+    toast('Google Drive backup ✓');
+  } catch (err) {
+    console.warn('Drive connect failed', err);
+    setDriveState('err', err.message);
+    toast('Google Drive: ' + err.message, 'err');
+  }
+}
+
+function scheduleDriveBackup() {
+  if (!driveConfigured() || !db.settings.driveAutoBackup) return;
+  if (!gTokenValid()) { setDriveState('pending'); return; }
+  clearTimeout(driveBackupTimer);
+  driveBackupTimer = setTimeout(async () => {
+    try { await driveBackupData(gToken); setDriveState('ok'); }
+    catch (err) { console.warn('Drive auto-backup failed', err); setDriveState('err', err.message); }
+  }, 3000);
+}
+
+function setDriveState(state, detail) {
+  driveState = state;
+  const chip = $('btnCloud');
+  const colors = { off: 'rgb(255 255 255 / 55%)', pending: 'var(--copper)', ok: '#7ee2b0', err: '#ff9d8f' };
+  if (chip) {
+    chip.style.color = colors[state] || colors.off;
+    chip.title = { off: 'Google Drive backup — not set up (click to open settings)',
+      pending: 'Google Drive — click to connect and back up',
+      ok: 'Google Drive backup is up to date ✓ (click to back up again)',
+      err: 'Google Drive backup problem — click to retry' + (detail ? ': ' + detail : '') }[state] || 'Google Drive backup';
+  }
+  const status = $('driveStatus');
+  if (status) {
+    status.textContent = { off: 'Not connected', pending: 'Ready — click “Connect & back up”',
+      ok: 'Connected ✓ — your data is backed up in the BusinessBench folder of your Drive',
+      err: 'Problem: ' + (detail || 'connection failed') }[state] || 'Not connected';
+  }
+}
+
+function updateOutputsUi() {
+  const status = $('outputsStatus');
+  const unlink = $('btnUnlinkOutputs');
+  const link = $('btnLinkOutputs');
+  if (!status) return;
+  if (outputsHandle) {
+    status.textContent = `Connected: ${outputsHandle.name} — “Save to Outputs” writes finished quotes here`;
+    unlink.hidden = false;
+    link.textContent = 'Choose a different folder…';
+  } else {
+    status.textContent = typeof window.showDirectoryPicker === 'function'
+      ? 'Not connected — click “Save to Outputs” or choose a folder here'
+      : 'Not supported in this browser — use Print / PDF and pick the folder in the save dialog';
+    unlink.hidden = true;
+    link.textContent = 'Choose folder…';
+  }
+}
+
+function updateStorageUi() {
+  const banner = $('storageBanner');
+  const status = $('dataFileStatus');
+  const unlink = $('btnUnlinkFile');
+  const link = $('btnLinkFile');
+  if (fileHandle) {
+    const name = fileHandle.name || 'BusinessBench-data.json';
+    if (handleNeedsPermission) {
+      status.textContent = `${name} — needs one click to reconnect`;
+      $('storageBannerText').textContent = 'Click to keep saving into your data file (your work is still auto-saved in this browser meanwhile).';
+      banner.classList.add('show');
+    } else if (fileWriteFailed) {
+      status.textContent = `${name} — last write failed, will retry`;
+      banner.classList.remove('show');
+    } else {
+      status.textContent = `Connected: ${name} — every change is written to it automatically`;
+      banner.classList.remove('show');
+    }
+    unlink.hidden = false;
+    link.textContent = 'Choose a different file…';
+  } else {
+    status.textContent = supportsFilePicker
+      ? 'Not connected — data auto-saves in this browser only'
+      : 'Not supported in this browser — data auto-saves in this browser; use backups for file copies';
+    unlink.hidden = true;
+    link.textContent = 'Choose data file…';
+    banner.classList.remove('show');
+  }
+  updateOutputsUi();
+}
+
+/* =================== backup / restore =================== */
+function downloadBackup() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `BusinessBench-backup-${isoDate()}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  setNotice('Backup downloaded');
+}
+
+function restoreBackup(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const incoming = normalizeData(JSON.parse(String(reader.result)));
+      if (!incoming) { alert('That file is not a BusinessBench backup.'); return; }
+      if (!confirm('Replace everything on screen with the data from this backup?')) return;
+      adoptData(incoming);
+      persist('Backup restored');
+    } catch {
+      alert('Could not read that backup file.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function adoptData(data) {
+  db = data;
+  quote = freshQuote(db.nextSequence, db.settings);
+  renderAll();
+}
+
+/* =================== notices =================== */
+let toastTimer = null;
+function toast(text, kind = 'ok') {
+  const el = $('toast');
+  el.textContent = text;
+  el.className = `toast show ${kind}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), kind === 'err' ? 4000 : 2600);
+}
+
+let noticeTimer = null;
+function setNotice(text, busy = false) {
+  $('noticeText').textContent = text;
+  $('notice').classList.toggle('busy', busy);
+  clearTimeout(noticeTimer);
+  if (!busy && text !== 'Ready' && text !== 'Unsaved changes') {
+    noticeTimer = setTimeout(() => { $('noticeText').textContent = 'Ready'; }, 4000);
+  }
+}
+
+/* =================== theme =================== */
+function applyTheme() {
+  const root = document.documentElement.style;
+  root.setProperty('--navy', db.settings.primaryColor);
+  root.setProperty('--copper', db.settings.accentColor);
+  root.setProperty('--desk', db.settings.backgroundColor);
+}
+
+/* =================== quote editing =================== */
+function patchQuote(patch) {
+  Object.assign(quote, patch);
+  quote.status = quote.id ? 'Edited' : 'Draft';
+  setNotice('Unsaved changes');
+}
+function quoteTotals() {
+  const subtotal = quote.items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.rate) || 0), 0);
+  const tax = subtotal * ((Number(quote.taxRate) || 0) / 100);
+  return { subtotal, tax, total: subtotal + tax };
+}
+
+function saveQuote() {
+ try {
+  const clientName = quote.clientName.trim();
+  const items = quote.items.filter((item) => item.name.trim());
+  if (!clientName) { toast('Add a customer name before saving the quote', 'err'); setNotice('Add a customer name before saving'); $('fClientName').focus(); return; }
+  if (!items.length) { toast('Name at least one line item before saving', 'err'); setNotice('Add at least one named line item'); return; }
+
+  const quoteNumber = quote.quoteNumber.trim() || `${db.settings.quotePrefix}-${String(quote.sequence).padStart(4, '0')}`;
+  const clash = db.quotes.find((entry) => entry.quoteNumber === quoteNumber && entry.id !== quote.id);
+  if (clash) { toast(`Quote number ${quoteNumber} is already in use`, 'err'); setNotice('That quote number is already in use'); return; }
+
+  if (!quote.id) quote.id = uuid();
+  quote.quoteNumber = quoteNumber;
+  quote.status = 'Saved';
+  const totals = quoteTotals();
+  quote.subtotal = totals.subtotal; quote.tax = totals.tax; quote.total = totals.total;
+  quote.updatedAt = new Date().toISOString();
+
+  db.quotes = [structuredClone(quote), ...db.quotes.filter((entry) => entry.id !== quote.id)];
+  db.nextSequence = Math.max(db.nextSequence, quote.sequence + 1);
+
+  // Also save/refresh the customer in the phone book (same behavior as before).
+  let customer = quote.customerId ? db.customers.find((entry) => entry.id === quote.customerId) : null;
+  if (!customer) customer = db.customers.find((entry) => entry.name.toLowerCase() === clientName.toLowerCase());
+  if (!customer) { customer = { id: uuid(), name: clientName, email: '', phone: '', address: '' }; db.customers.push(customer); }
+  customer.name = clientName;
+  customer.email = quote.clientEmail.trim();
+  customer.phone = quote.clientPhone.trim();
+  customer.address = quote.clientAddress.trim();
+  quote.customerId = customer.id;
+  db.customers.sort((a, b) => a.name.localeCompare(b.name));
+
+  persist('Quote and customer saved');
+  renderAll();
+  toast(`Quote ${quote.quoteNumber} saved ✓`);
+ } catch (err) {
+  console.error('saveQuote failed', err);
+  alert('Could not save the quote: ' + (err && err.message ? err.message : err));
+ }
+}
+
+function startNewQuote() {
+  const sequence = Math.max(db.nextSequence, ...db.quotes.map((entry) => entry.sequence + 1), 1001);
+  quote = freshQuote(sequence, db.settings);
+  renderAll();
+  setNotice('New draft');
+}
+
+function openQuote(id) {
+  const entry = db.quotes.find((item) => item.id === id);
+  if (!entry) return;
+  quote = structuredClone(entry);
+  renderAll();
+  setNotice(`Opened ${quote.quoteNumber}`);
+}
+
+/* =================== rendering =================== */
+function renderHistory() {
+  const wrap = $('historyList');
+  if (!db.quotes.length) {
+    wrap.innerHTML = '<div class="history-empty">Your saved quotes will appear here.</div>';
+    return;
+  }
+  wrap.innerHTML = db.quotes.map((entry) => `
+    <button class="history-item ${entry.id === quote.id ? 'active' : ''}" data-open="${entry.id}">
+      <div class="row1"><span>${escapeHtml(entry.quoteNumber)}</span><span class="pill">Saved</span></div>
+      <p class="client">${escapeHtml(entry.clientName)}</p>
+      <p class="meta">${displayDate(entry.issueDate)} · ${money.format(entry.total ?? 0)}</p>
+    </button>`).join('');
+  wrap.querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => openQuote(el.dataset.open)));
+}
+
+function renderCustomerPicker() {
+  const picker = $('customerPicker');
+  picker.innerHTML = '<option value="">Choose a saved customer…</option>' +
+    db.customers.map((customer) => `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.name)}</option>`).join('');
+  picker.value = '';
+}
+
+function renderCategories() {
+  const categories = [...new Set(db.catalog.map((item) => item.category).filter(Boolean))];
+  $('categoryList').innerHTML = categories.map((category) => `<option value="${escapeHtml(category)}"></option>`).join('');
+}
+
+function catalogOptions(selected) {
+  return '<option value="">Choose a saved item…</option>' + db.catalog.map((saved) =>
+    `<option value="${escapeHtml(saved.id)}" ${saved.id === selected ? 'selected' : ''}>${escapeHtml(saved.category)} — ${escapeHtml(saved.name)} (${money.format(saved.rate)})</option>`).join('');
+}
+
+function renderLineItems() {
+  const wrap = $('lineItems');
+  wrap.innerHTML = quote.items.map((item, index) => `
+    <div class="line-card" data-line="${item.id}">
+      <div class="line-top">
+        <span class="line-no">${index + 1}</span>
+        <select class="select" data-field="pickCatalog" style="flex:1; min-width:0;">${catalogOptions('')}</select>
+        <button class="btn ghost icon" data-field="remove" title="Remove item" ${quote.items.length === 1 ? 'disabled' : ''}>🗑</button>
+      </div>
+      <input class="input" data-field="name" placeholder="Item or service" style="margin-bottom:.5rem; font-weight:600;" value="${escapeHtml(item.name)}">
+      <textarea class="textarea" data-field="description" placeholder="Description" style="margin-bottom:.75rem; min-height:4rem;">${escapeHtml(item.description)}</textarea>
+      <div class="line-grid">
+        <label><span class="mini-label">Category</span><input class="input" data-field="category" list="categoryList" value="${escapeHtml(item.category)}"></label>
+        <label><span class="mini-label">Qty</span><input type="number" min="0" step="0.25" class="input" data-field="quantity" value="${item.quantity}"></label>
+        <label><span class="mini-label">Unit</span><input class="input" data-field="unit" value="${escapeHtml(item.unit)}"></label>
+        <label><span class="mini-label">Rate</span><input type="number" min="0" step="0.01" class="input" data-field="rate" value="${item.rate}"></label>
+      </div>
+      <div class="line-foot">
+        <button class="btn ghost xs" data-field="saveToCatalog">🔖 Save Item</button>
+        <p class="line-amt" data-field="amount">${money.format((Number(item.quantity) || 0) * (Number(item.rate) || 0))}</p>
+      </div>
+    </div>`).join('');
+
+  wrap.querySelectorAll('.line-card').forEach((card) => {
+    const id = card.dataset.line;
+    const find = () => quote.items.find((entry) => entry.id === id);
+    card.querySelector('[data-field="pickCatalog"]').addEventListener('change', (event) => {
+      const saved = db.catalog.find((entry) => entry.id === event.target.value);
+      if (!saved) return;
+      const item = find();
+      Object.assign(item, { catalogId: saved.id, name: saved.name, description: saved.description, category: saved.category, unit: saved.unit, rate: saved.rate });
+      patchQuote({});
+      renderLineItems(); renderPreview(); renderTotals();
+    });
+    card.querySelector('[data-field="remove"]').addEventListener('click', () => {
+      patchQuote({ items: quote.items.filter((entry) => entry.id !== id) });
+      renderLineItems(); renderPreview(); renderTotals();
+    });
+    ['name', 'description', 'category', 'unit'].forEach((field) => {
+      card.querySelector(`[data-field="${field}"]`).addEventListener('input', (event) => {
+        find()[field] = event.target.value;
+        patchQuote({});
+        renderPreview();
+      });
+    });
+    ['quantity', 'rate'].forEach((field) => {
+      card.querySelector(`[data-field="${field}"]`).addEventListener('input', (event) => {
+        find()[field] = Number(event.target.value) || 0;
+        patchQuote({});
+        const item = find();
+        card.querySelector('[data-field="amount"]').textContent = money.format(item.quantity * item.rate);
+        renderPreview(); renderTotals();
+      });
+    });
+    card.querySelector('[data-field="saveToCatalog"]').addEventListener('click', () => {
+      const item = find();
+      if (!item.name.trim()) { toast('Name the line item before saving it', 'err'); return; }
+      const candidate = {
+        name: item.name.trim(), description: String(item.description || '').trim(),
+        category: item.category.trim() || 'General', unit: item.unit.trim() || 'each',
+        rate: Number(item.rate) || 0,
+      };
+      // If an identical item already exists, just link to it. If anything differs
+      // (name, description, category, unit, or rate), save as a brand-new item —
+      // never overwrite an existing saved item from a quote line.
+      const existing = db.catalog.find((entry) =>
+        entry.name.trim().toLowerCase() === candidate.name.toLowerCase() &&
+        String(entry.description || '').trim() === candidate.description &&
+        String(entry.category || '').trim().toLowerCase() === candidate.category.toLowerCase() &&
+        String(entry.unit || '').trim().toLowerCase() === candidate.unit.toLowerCase() &&
+        (Number(entry.rate) || 0) === candidate.rate);
+      if (existing) {
+        item.catalogId = existing.id;
+        toast(`“${existing.name}” is already in Saved Items`);
+        renderLineItems();
+        return;
+      }
+      const saved = { id: uuid(), ...candidate };
+      db.catalog = [saved, ...db.catalog].sort((a, b) => a.name.localeCompare(b.name));
+      item.catalogId = saved.id;
+      persist(`Saved “${saved.name}” to Saved Items`);
+      toast(`Added “${saved.name}” to Saved Items ✓`);
+      renderCategories(); renderLineItems(); renderCatalogList();
+    });
+  });
+}
+
+function renderForm() {
+  $('fQuoteNumber').value = quote.quoteNumber;
+  $('fClientName').value = quote.clientName;
+  $('fClientEmail').value = quote.clientEmail;
+  $('fClientPhone').value = quote.clientPhone;
+  $('fClientAddress').value = quote.clientAddress;
+  $('fProjectName').value = quote.projectName;
+  $('fIssueDate').value = quote.issueDate;
+  $('fValidUntil').value = quote.validUntil;
+  $('fNotes').value = quote.notes;
+  $('fTaxRate').value = quote.taxRate;
+}
+
+function renderTotals() {
+  const totals = quoteTotals();
+  $('totalInline').textContent = money.format(totals.total);
+}
+
+function renderPreview() {
+  const settings = db.settings;
+  const totals = quoteTotals();
+  const businessContact = [settings.phone, settings.email].filter(Boolean).join(' · ');
+  const showText = settings.showBusinessText !== false;
+  const logo = settings.logoDataUrl
+    ? `<img src="${settings.logoDataUrl}" alt="Business logo">`
+    : '<div class="paper-logo-fallback">💼</div>';
+  const nameBlock = !showText ? '' : (settings.businessName
+    ? `<div><p class="paper-bizname">${escapeHtml(settings.businessName)}</p><p class="paper-tagline">${escapeHtml(settings.tagline)}</p></div>`
+    : (settings.logoDataUrl ? '' : '<p class="paper-bizname">YOUR BUSINESS</p>'));
+  const soloLogo = !showText && settings.logoDataUrl;
+
+  $('quotePaper').innerHTML = `
+    <div class="paper-head">
+      <div>
+        <div class="paper-logo-row${soloLogo ? ' solo' : ''}">${logo}${nameBlock}</div>
+        <p class="paper-addr">${escapeHtml(settings.address || 'Add your business address')}${businessContact ? '\n' + escapeHtml(businessContact) : '\nAdd phone and email'}</p>
+      </div>
+      <div style="text-align:right;">
+        <p class="paper-title">QUOTE</p>
+        <p class="paper-qnum"># ${escapeHtml(quote.quoteNumber)}</p>
+        <p class="paper-issued">Issued ${displayDate(quote.issueDate)}</p>
+      </div>
+    </div>
+    <div class="paper-parties">
+      <div>
+        <p class="document-label">Prepared for</p>
+        <p style="margin-top:.5rem; font-size:1.125rem; font-weight:700; color:var(--navy);">${escapeHtml(quote.clientName) || 'Customer name'}</p>
+        <p style="margin-top:.25rem; white-space:pre-line; font-size:.875rem; line-height:1.25rem; color:var(--muted-fg);">${escapeHtml([quote.clientAddress, quote.clientPhone, quote.clientEmail].filter(Boolean).join('\n')) || 'Customer details'}</p>
+      </div>
+      <div style="text-align:right;">
+        <p class="document-label">Project</p>
+        <p style="margin-top:.5rem; font-weight:600; color:var(--navy);">${escapeHtml(quote.projectName) || 'Project or job name'}</p>
+        <p style="margin-top:.25rem; font-size:.875rem; color:var(--muted-fg);">Valid until ${displayDate(quote.validUntil)}</p>
+      </div>
+    </div>
+    <table class="paper-table">
+      <thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead>
+      <tbody>
+        ${quote.items.map((item) => `
+        <tr>
+          <td><p class="iname">${escapeHtml(item.name) || 'Untitled item'}</p><p class="idesc">${escapeHtml(item.description)}</p></td>
+          <td class="r">${item.quantity}</td>
+          <td class="r">${money.format(item.rate)}</td>
+          <td class="r amt">${money.format((Number(item.quantity) || 0) * (Number(item.rate) || 0))}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="paper-totals">
+      <div class="row"><span>Subtotal</span><span>${money.format(totals.subtotal)}</span></div>
+      <div class="row"><span>Tax (${quote.taxRate}%)</span><span>${money.format(totals.tax)}</span></div>
+      <div class="grand"><span>Total</span><span>${money.format(totals.total)}</span></div>
+    </div>
+    <div class="paper-thanks">
+      <p class="lead">Thank you for the opportunity.</p>
+      <p class="body">${escapeHtml(quote.notes || settings.defaultTerms)}</p>
+    </div>`;
+}
+
+function renderCustomerList() {
+  const wrap = $('customerList');
+  wrap.innerHTML = db.customers.length ? db.customers.map((customer) => `
+    <div class="list-row">
+      <div class="info">
+        <p class="nm">${escapeHtml(customer.name)}</p>
+        <p class="sub">${escapeHtml([customer.phone, customer.email, customer.address].filter(Boolean).join(' · ')) || 'No contact details yet'}</p>
+      </div>
+      <div class="acts">
+        <button class="btn xs copper" data-use="${customer.id}">Use</button>
+        <button class="btn xs outline" data-edit="${customer.id}">Edit</button>
+        <button class="btn xs ghost" data-del="${customer.id}" title="Delete">🗑</button>
+      </div>
+    </div>`).join('') : '<p style="font-size:.8rem; color:var(--muted-fg);">No saved customers yet.</p>';
+
+  wrap.querySelectorAll('[data-use]').forEach((el) => el.addEventListener('click', () => {
+    const customer = db.customers.find((entry) => entry.id === el.dataset.use);
+    if (!customer) return;
+    patchQuote({ customerId: customer.id, clientName: customer.name, clientEmail: customer.email, clientPhone: customer.phone, clientAddress: customer.address });
+    $('dlgCustomers').close();
+    renderForm(); renderPreview();
+    setNotice(`Added ${customer.name}`);
+  }));
+  wrap.querySelectorAll('[data-edit]').forEach((el) => el.addEventListener('click', () => {
+    const customer = db.customers.find((entry) => entry.id === el.dataset.edit);
+    if (!customer) return;
+    editingCustomerId = customer.id;
+    $('cName').value = customer.name; $('cEmail').value = customer.email;
+    $('cPhone').value = customer.phone; $('cAddress').value = customer.address;
+    $('btnClearCustomer').hidden = false;
+  }));
+  wrap.querySelectorAll('[data-del]').forEach((el) => el.addEventListener('click', () => {
+    const customer = db.customers.find((entry) => entry.id === el.dataset.del);
+    if (!customer || !confirm(`Delete customer “${customer.name}”?`)) return;
+    db.customers = db.customers.filter((entry) => entry.id !== customer.id);
+    if (editingCustomerId === customer.id) clearCustomerForm();
+    persist('Customer deleted');
+    renderCustomerList(); renderCustomerPicker();
+  }));
+}
+
+function clearCustomerForm() {
+  editingCustomerId = '';
+  ['cName', 'cEmail', 'cPhone', 'cAddress'].forEach((id) => { $(id).value = ''; });
+  $('btnClearCustomer').hidden = true;
+}
+
+function renderCatalogList() {
+  const wrap = $('catalogList');
+  wrap.innerHTML = db.catalog.length ? db.catalog.map((item) => `
+    <div class="list-row">
+      <div class="info">
+        <p class="nm">${escapeHtml(item.name)}</p>
+        <p class="sub">${escapeHtml(item.category)} · ${money.format(item.rate)} / ${escapeHtml(item.unit)}</p>
+      </div>
+      <div class="acts">
+        <button class="btn xs outline" data-edit="${item.id}">Edit</button>
+        <button class="btn xs ghost" data-del="${item.id}" title="Delete">🗑</button>
+      </div>
+    </div>`).join('') : '<p style="font-size:.8rem; color:var(--muted-fg);">No saved items yet. Save one from a quote line, or add one above.</p>';
+
+  wrap.querySelectorAll('[data-edit]').forEach((el) => el.addEventListener('click', () => {
+    const item = db.catalog.find((entry) => entry.id === el.dataset.edit);
+    if (!item) return;
+    editingCatalogId = item.id;
+    $('iName').value = item.name; $('iCategory').value = item.category;
+    $('iDescription').value = item.description; $('iUnit').value = item.unit; $('iRate').value = item.rate;
+    $('btnClearCatalog').hidden = false;
+  }));
+  wrap.querySelectorAll('[data-del]').forEach((el) => el.addEventListener('click', () => {
+    const item = db.catalog.find((entry) => entry.id === el.dataset.del);
+    if (!item || !confirm(`Delete saved item “${item.name}”?`)) return;
+    db.catalog = db.catalog.filter((entry) => entry.id !== item.id);
+    if (editingCatalogId === item.id) clearCatalogForm();
+    persist('Saved item deleted');
+    renderCategories(); renderCatalogList(); renderLineItems();
+  }));
+}
+
+function clearCatalogForm() {
+  editingCatalogId = '';
+  $('iName').value = ''; $('iCategory').value = 'General'; $('iDescription').value = '';
+  $('iUnit').value = 'each'; $('iRate').value = '';
+  $('btnClearCatalog').hidden = true;
+}
+
+function renderSettingsForm() {
+  const settings = db.settings;
+  $('sShowBusinessText').checked = settings.showBusinessText !== false;
+  $('sBusinessName').value = settings.businessName;
+  $('sTagline').value = settings.tagline;
+  $('sQuotePrefix').value = settings.quotePrefix;
+  $('sEmail').value = settings.email;
+  $('sPhone').value = settings.phone;
+  $('sAddress').value = settings.address;
+  $('sDefaultTerms').value = settings.defaultTerms;
+  [['sPrimaryColor', 'primaryColor'], ['sAccentColor', 'accentColor'], ['sBackgroundColor', 'backgroundColor']].forEach(([id, key]) => {
+    $(id).value = settings[key];
+    $(id + 'Text').value = settings[key];
+  });
+  renderLogoUi();
+  $('sDriveClientId').value = settings.driveClientId || '';
+  $('sDriveAuto').checked = Boolean(settings.driveAutoBackup);
+  if (location.protocol === 'file:') {
+    $('driveHint').innerHTML = '<b>Heads up:</b> you opened BusinessBench as a local file, and Google only allows '
+      + 'sign-in from a web address. Use your hosted copy (e.g. on your github.io page) for Drive backup — '
+      + 'this local copy still saves everything on your PC as usual.';
+  }
+  if (driveState === 'off' && driveConfigured()) setDriveState('pending');
+  updateStorageUi();
+}
+
+function renderLogoUi() {
+  const has = Boolean(db.settings.logoDataUrl);
+  $('logoPreview').hidden = !has;
+  if (has) $('logoPreview').src = db.settings.logoDataUrl;
+  $('logoPlaceholder').style.display = has ? 'none' : 'block';
+  $('btnRemoveLogo').hidden = !has;
+}
+
+function renderAll() {
+  applyTheme();
+  renderForm();
+  renderLineItems();
+  renderTotals();
+  renderPreview();
+  renderHistory();
+  renderCustomerPicker();
+  renderCategories();
+  renderCustomerList();
+  renderCatalogList();
+  renderSettingsForm();
+}
+
+/* =================== logo upload =================== */
+function handleLogoFile(file) {
+  if (!file) return;
+  if (file.size > 4 * 1024 * 1024) { alert('The logo must be smaller than 4 MB.'); return; }
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { alert('Please choose a PNG, JPG, or WebP image.'); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    db.settings.logoDataUrl = String(reader.result);
+    persist('Logo saved');
+    renderLogoUi(); renderPreview();
+  };
+  reader.onerror = () => alert('Could not read that image file.');
+  reader.readAsDataURL(file);
+}
+
+/* =================== wire up =================== */
+function bindQuoteField(id, field, numeric = false) {
+  $(id).addEventListener('input', (event) => {
+    patchQuote({ [field]: numeric ? (Number(event.target.value) || 0) : event.target.value });
+    if (field === 'clientName') quote.customerId = '';
+    renderPreview(); renderTotals();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  // Load data: linked file (if permission persists) > localStorage > fresh.
+  let loaded = null;
+  if (hasLocalStorage) {
+    try { loaded = normalizeData(JSON.parse(localStorage.getItem(LS_KEY) || 'null')); } catch { loaded = null; }
+  }
+  if (loaded) db = loaded;
+
+  if (typeof window.showDirectoryPicker === 'function' && window.indexedDB) {
+    const storedOutputs = await idbGet('outputsDirHandle');
+    if (storedOutputs) outputsHandle = storedOutputs;
+  }
+
+  if (supportsFilePicker && window.indexedDB) {
+    const storedHandle = await idbGet('dataFileHandle');
+    if (storedHandle) {
+      fileHandle = storedHandle;
+      try {
+        const permission = await fileHandle.queryPermission({ mode: 'readwrite' });
+        if (permission === 'granted') {
+          try {
+            const file = await fileHandle.getFile();
+            const incoming = normalizeData(JSON.parse(await file.text()));
+            if (incoming && (!loaded || incoming.updatedAt >= loaded.updatedAt)) db = incoming;
+          } catch (err) { console.warn('Could not read data file at startup', err); }
+        } else {
+          handleNeedsPermission = true;
+        }
+      } catch (err) {
+        console.warn('Handle permission check failed', err);
+        handleNeedsPermission = true;
+      }
+    }
+  }
+
+  quote = freshQuote(Math.max(db.nextSequence, 1001), db.settings);
+  renderAll();
+  setNotice('Ready');
+
+  // --- quote form fields ---
+  bindQuoteField('fQuoteNumber', 'quoteNumber');
+  bindQuoteField('fClientName', 'clientName');
+  bindQuoteField('fClientEmail', 'clientEmail');
+  bindQuoteField('fClientPhone', 'clientPhone');
+  bindQuoteField('fClientAddress', 'clientAddress');
+  bindQuoteField('fProjectName', 'projectName');
+  bindQuoteField('fIssueDate', 'issueDate');
+  bindQuoteField('fValidUntil', 'validUntil');
+  bindQuoteField('fNotes', 'notes');
+  bindQuoteField('fTaxRate', 'taxRate', true);
+
+  $('customerPicker').addEventListener('change', (event) => {
+    const customer = db.customers.find((entry) => entry.id === event.target.value);
+    if (!customer) return;
+    patchQuote({ customerId: customer.id, clientName: customer.name, clientEmail: customer.email, clientPhone: customer.phone, clientAddress: customer.address });
+    renderForm(); renderPreview();
+    event.target.value = '';
+    setNotice(`Added ${customer.name}`);
+  });
+
+  $('btnAddLine').addEventListener('click', () => {
+    patchQuote({ items: [...quote.items, blankLine()] });
+    renderLineItems(); renderPreview(); renderTotals();
+  });
+  $('btnSaveQuote').addEventListener('click', saveQuote);
+  $('btnNewQuote').addEventListener('click', startNewQuote);
+  $('btnPrint').addEventListener('click', () => window.print());
+  $('btnSaveOutput').addEventListener('click', saveToOutputs);
+
+  // Name the PDF automatically: browsers use the page title as the suggested
+  // filename when saving as PDF from the print dialog.
+  let titleBeforePrint = document.title;
+  window.addEventListener('beforeprint', () => { titleBeforePrint = document.title; document.title = quoteFileBase(); });
+  window.addEventListener('afterprint', () => { document.title = titleBeforePrint; });
+
+  // --- dialogs ---
+  const openDialog = (id) => $(id).showModal();
+  const resetSettingsTab = () => {
+    $('settingsTabs').querySelectorAll('button').forEach((el) => el.classList.toggle('active', el.dataset.tab === 'business'));
+    document.querySelectorAll('#dlgSettings .tabpane').forEach((pane) => { pane.hidden = pane.dataset.pane !== 'business'; });
+  };
+  $('btnSettings').addEventListener('click', () => { renderSettingsForm(); resetSettingsTab(); openDialog('dlgSettings'); });
+  ['btnCustomersTop', 'btnCustomersSide', 'btnPhonebook'].forEach((id) => $(id).addEventListener('click', () => openDialog('dlgCustomers')));
+  ['btnCatalogTop', 'btnCatalogSide', 'btnCatalogInline'].forEach((id) => $(id).addEventListener('click', () => openDialog('dlgCatalog')));
+  document.querySelectorAll('.dlg-close').forEach((el) => el.addEventListener('click', () => $(el.dataset.close).close()));
+
+  // --- settings tabs ---
+  $('settingsTabs').querySelectorAll('button').forEach((tab) => tab.addEventListener('click', () => {
+    $('settingsTabs').querySelectorAll('button').forEach((el) => el.classList.toggle('active', el === tab));
+    document.querySelectorAll('#dlgSettings .tabpane').forEach((pane) => { pane.hidden = pane.dataset.pane !== tab.dataset.tab; });
+  }));
+
+  // --- color pickers keep text + swatch in sync ---
+  [['sPrimaryColor'], ['sAccentColor'], ['sBackgroundColor']].forEach(([id]) => {
+    $(id).addEventListener('input', () => { $(id + 'Text').value = $(id).value; });
+    $(id + 'Text').addEventListener('input', () => {
+      const value = cleanColor($(id + 'Text').value, '');
+      if (value) $(id).value = value;
+    });
+  });
+  $('btnResetColors').addEventListener('click', () => {
+    [['sPrimaryColor', defaultSettings.primaryColor], ['sAccentColor', defaultSettings.accentColor], ['sBackgroundColor', defaultSettings.backgroundColor]].forEach(([id, value]) => {
+      $(id).value = value; $(id + 'Text').value = value;
+    });
+  });
+
+  $('btnSaveSettings').addEventListener('click', () => {
+    const settings = db.settings;
+    const previousPrefix = settings.quotePrefix;
+    settings.showBusinessText = $('sShowBusinessText').checked;
+    settings.businessName = $('sBusinessName').value.trim();
+    settings.tagline = $('sTagline').value.trim();
+    settings.quotePrefix = ($('sQuotePrefix').value.trim().toUpperCase() || 'QT').slice(0, 8);
+    settings.email = $('sEmail').value.trim();
+    settings.phone = $('sPhone').value.trim();
+    settings.address = $('sAddress').value.trim();
+    settings.defaultTerms = $('sDefaultTerms').value.trim() || defaultSettings.defaultTerms;
+    settings.driveClientId = $('sDriveClientId').value.trim();
+    settings.driveAutoBackup = $('sDriveAuto').checked;
+    settings.primaryColor = cleanColor($('sPrimaryColorText').value, settings.primaryColor);
+    settings.accentColor = cleanColor($('sAccentColorText').value, settings.accentColor);
+    settings.backgroundColor = cleanColor($('sBackgroundColorText').value, settings.backgroundColor);
+    if (!quote.id && quote.quoteNumber.startsWith(`${previousPrefix}-`)) {
+      quote.quoteNumber = `${settings.quotePrefix}-${String(quote.sequence).padStart(4, '0')}`;
+    }
+    persist('Business and appearance settings saved');
+    $('dlgSettings').close();
+    renderAll();
+  });
+
+  // --- logo ---
+  $('logoFile').addEventListener('change', (event) => {
+    handleLogoFile(event.target.files && event.target.files[0]);
+    event.target.value = '';
+  });
+  $('btnRemoveLogo').addEventListener('click', () => {
+    db.settings.logoDataUrl = '';
+    persist('Logo removed');
+    renderLogoUi(); renderPreview();
+  });
+
+  // --- customers dialog ---
+  $('btnSaveCustomer').addEventListener('click', () => {
+    const name = $('cName').value.trim();
+    if (!name) { alert('Customer name is required.'); return; }
+    const customer = editingCustomerId
+      ? db.customers.find((entry) => entry.id === editingCustomerId)
+      : { id: uuid(), name: '', email: '', phone: '', address: '' };
+    if (!editingCustomerId) db.customers.push(customer);
+    customer.name = name;
+    customer.email = $('cEmail').value.trim();
+    customer.phone = $('cPhone').value.trim();
+    customer.address = $('cAddress').value.trim();
+    db.customers.sort((a, b) => a.name.localeCompare(b.name));
+    clearCustomerForm();
+    persist('Customer saved');
+    renderCustomerList(); renderCustomerPicker();
+  });
+  $('btnClearCustomer').addEventListener('click', clearCustomerForm);
+
+  // --- catalog dialog ---
+  $('btnSaveCatalog').addEventListener('click', () => {
+    const name = $('iName').value.trim();
+    if (!name) { alert('Item name is required.'); return; }
+    const item = editingCatalogId
+      ? db.catalog.find((entry) => entry.id === editingCatalogId)
+      : { id: uuid() };
+    if (!editingCatalogId) db.catalog.push(item);
+    item.name = name;
+    item.category = $('iCategory').value.trim() || 'General';
+    item.description = $('iDescription').value;
+    item.unit = $('iUnit').value.trim() || 'each';
+    item.rate = Math.max(0, Number($('iRate').value) || 0);
+    db.catalog.sort((a, b) => a.name.localeCompare(b.name));
+    clearCatalogForm();
+    persist('Saved item updated');
+    renderCategories(); renderCatalogList(); renderLineItems();
+  });
+  $('btnClearCatalog').addEventListener('click', clearCatalogForm);
+  clearCatalogForm();
+
+  // --- data file / backups ---
+  $('btnLinkFile').addEventListener('click', linkDataFile);
+  $('btnUnlinkFile').addEventListener('click', unlinkDataFile);
+  $('btnLinkOutputs').addEventListener('click', chooseOutputsFolder);
+  $('btnUnlinkOutputs').addEventListener('click', unlinkOutputsFolder);
+
+  // --- Google Drive ---
+  $('btnDriveConnect').addEventListener('click', driveConnectAndBackup);
+  $('btnCloud').addEventListener('click', () => {
+    if (!driveConfigured()) {
+      renderSettingsForm(); resetSettingsTab();
+      $('settingsTabs').querySelector('button[data-tab="data"]').click();
+      $('dlgSettings').showModal();
+      return;
+    }
+    driveConnectAndBackup();
+  });
+  $('sDriveAuto').addEventListener('change', (event) => {
+    db.settings.driveAutoBackup = event.target.checked;
+    persist();
+  });
+  setDriveState(driveConfigured() ? 'pending' : 'off');
+  $('btnReconnect').addEventListener('click', reconnectDataFile);
+  $('btnDismissBanner').addEventListener('click', () => $('storageBanner').classList.remove('show'));
+  $('btnExport').addEventListener('click', downloadBackup);
+  $('btnImport').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (file) restoreBackup(file);
+    event.target.value = '';
+  });
+
+  updateStorageUi();
+  if (handleNeedsPermission) $('storageBanner').classList.add('show');
+});
+</script>
+</body>
+</html>
