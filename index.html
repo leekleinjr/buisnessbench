@@ -19,6 +19,7 @@
     --radius: .65rem;
   }
   * { box-sizing: border-box; border-color: var(--border); }
+  [hidden] { display: none !important; }
   html { font-family: "Segoe UI", system-ui, Arial, sans-serif; }
   body { margin: 0; background: var(--desk); color: var(--fg); font-size: 14px; }
   button, input, textarea, select { font: inherit; color: inherit; }
@@ -90,6 +91,8 @@
   .history-item.active { border-color: color-mix(in srgb, var(--copper) 50%, transparent); background: var(--copper-soft); }
   .history-item .row1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: .25rem; font-size: .72rem; font-weight: 600; }
   .history-item .pill { border-radius: 999px; background: #fff; padding: .1rem .5rem; font-size: 10px; color: #047857; }
+  .history-item .delx { margin-left: .35rem; padding: .05rem .3rem; border-radius: .3rem; color: var(--muted-fg); font-size: 11px; }
+  .history-item .delx:hover { background: #fee2e2; color: #b91c1c; }
   .history-item .client { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; font-weight: 600; color: var(--navy); }
   .history-item .meta { margin-top: .25rem; font-size: .72rem; color: var(--muted-fg); }
 
@@ -238,7 +241,8 @@
 
 <div class="layout">
   <aside class="sidebar">
-    <button class="btn outline" id="btnNewQuote" style="width:100%; justify-content:flex-start; margin-bottom:1rem;">＋ New quote</button>
+    <button class="btn outline" id="btnNewQuote" style="width:100%; justify-content:flex-start; margin-bottom:.5rem;">＋ New quote</button>
+    <button class="btn outline" id="btnNewInvoice" style="width:100%; justify-content:flex-start; margin-bottom:1rem;">🧾 New invoice</button>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem;">
       <button class="btn outline sm" id="btnCustomersSide">👥 Customers</button>
       <button class="btn outline sm" id="btnCatalogSide">📚 Items</button>
@@ -2841,6 +2845,10 @@ var qrcode = function() {
       <label><span class="field-label">To</span><input type="email" class="input" id="eTo" placeholder="customer@email.com"></label>
       <label><span class="field-label">Subject</span><input class="input" id="eSubject"></label>
       <label><span class="field-label">Message</span><textarea class="textarea" id="eBody" style="min-height:200px;"></textarea></label>
+      <label style="display:flex; align-items:center; gap:.5rem; font-size:.8rem; cursor:pointer;">
+        <input type="checkbox" id="eCopyMe" style="width:1rem; height:1rem; accent-color:var(--copper);">
+        <span>Send a copy to my email (<span id="eMyEmail">—</span>)</span>
+      </label>
       <p style="font-size:.72rem; color:var(--muted-fg);" id="eAttachNote"></p>
     </div>
     <div class="dlg-foot"><button class="btn copper" id="btnSendEmail">✉ Send from my Gmail</button></div>
@@ -2888,6 +2896,7 @@ const defaultSettings = {
   zelleInfo: '',
   bankDetails: '',
   dueDays: 30,
+  emailCopyToSelf: true,
 };
 
 function freshData() {
@@ -3632,6 +3641,10 @@ function openEmailDialog() {
   $('eSubject').value = defaults.subject;
   $('eBody').value = defaults.body;
   $('eAttachNote').textContent = `Attached: ${quoteFileBase()}.pdf`;
+  const myEmail = (db.settings.email || '').trim();
+  $('eMyEmail').textContent = myEmail || 'add your email in Business settings first';
+  $('eCopyMe').disabled = !myEmail;
+  $('eCopyMe').checked = Boolean(myEmail) && db.settings.emailCopyToSelf !== false;
   $('dlgEmail').showModal();
 }
 
@@ -3648,8 +3661,12 @@ async function sendDocEmail() {
     const boundary = 'bb' + Math.random().toString(36).slice(2);
     const subject = $('eSubject').value.trim() || `${docWord(true)} ${quote.quoteNumber}`;
     const encodedSubject = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
+    const myEmail = (db.settings.email || '').trim();
+    const copyMe = $('eCopyMe').checked && myEmail;
+    db.settings.emailCopyToSelf = $('eCopyMe').checked;
     const mime = [
       `To: ${to}`,
+      ...(copyMe ? [`Cc: ${myEmail}`] : []),
       `Subject: ${encodedSubject}`,
       'MIME-Version: 1.0',
       `Content-Type: multipart/mixed; boundary="${boundary}"`,
@@ -3967,6 +3984,32 @@ function startNewQuote() {
   setNotice('New draft');
 }
 
+function startNewInvoice() {
+  const sequence = Math.max(db.nextInvoiceSequence, ...db.invoices.map((entry) => entry.sequence + 1), 2001);
+  quote = freshQuote(sequence, db.settings);
+  quote.kind = 'invoice';
+  quote.quoteNumber = `INV-${String(sequence).padStart(4, '0')}`;
+  quote.status = 'Draft';
+  quote.quoteRef = '';
+  quote.validUntil = isoDate(Number(db.settings.dueDays) || 30);
+  renderAll();
+  setNotice('New invoice draft');
+}
+
+function deleteDoc(id, kind) {
+  const pool = kind === 'invoice' ? db.invoices : db.quotes;
+  const entry = pool.find((item) => item.id === id);
+  if (!entry) return;
+  if (!confirm(`Delete ${kind} ${entry.quoteNumber} (${entry.clientName})? This can't be undone.`)) return;
+  if (kind === 'invoice') db.invoices = db.invoices.filter((item) => item.id !== id);
+  else db.quotes = db.quotes.filter((item) => item.id !== id);
+  const wasOpen = quote.id === id;
+  persist(`Deleted ${entry.quoteNumber}`);
+  if (wasOpen) { if (kind === 'invoice') startNewInvoice(); else startNewQuote(); }
+  else renderAll();
+  toast(`Deleted ${entry.quoteNumber}`);
+}
+
 function openQuote(id) {
   const entry = db.quotes.find((item) => item.id === id) || db.invoices.find((item) => item.id === id);
   if (!entry) return;
@@ -3977,39 +4020,55 @@ function openQuote(id) {
 }
 
 /* =================== rendering =================== */
+function wireHistoryList(wrap, kind) {
+  wrap.querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => openQuote(el.dataset.open)));
+  wrap.querySelectorAll('[data-del]').forEach((el) => el.addEventListener('click', (event) => {
+    event.stopPropagation();
+    deleteDoc(el.dataset.del, kind);
+  }));
+}
+
 function renderHistory() {
   const wrap = $('historyList');
   if (!db.quotes.length) {
     wrap.innerHTML = '<div class="history-empty">Your saved quotes will appear here.</div>';
-    return;
-  }
-  wrap.innerHTML = db.quotes.map((entry) => `
+  } else {
+    wrap.innerHTML = db.quotes.map((entry) => `
     <button class="history-item ${entry.id === quote.id ? 'active' : ''}" data-open="${entry.id}">
-      <div class="row1"><span>${escapeHtml(entry.quoteNumber)}</span><span class="pill">Saved</span></div>
+      <div class="row1"><span>${escapeHtml(entry.quoteNumber)}</span><span><span class="pill">Saved</span><span class="delx" data-del="${entry.id}" title="Delete quote">✕</span></span></div>
       <p class="client">${escapeHtml(entry.clientName)}</p>
       <p class="meta">${displayDate(entry.issueDate)} · ${money.format(entry.total ?? 0)}</p>
     </button>`).join('');
-  wrap.querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => openQuote(el.dataset.open)));
+    wireHistoryList(wrap, 'quote');
+  }
   renderInvoiceList();
 }
 
 const STATUS_COLORS = { Draft: '#6b7280', Sent: '#b45309', Paid: '#047857', Overdue: '#b91c1c' };
 function renderInvoiceList() {
   const wrap = $('invoiceList');
-  if (!db.invoices.length) {
-    wrap.innerHTML = '<div class="history-empty">Open a saved quote and click “Make invoice”.</div>';
+  const unsavedDraft = isInvoice() && !quote.id;
+  const totals = unsavedDraft ? quoteTotals() : null;
+  const draftCard = unsavedDraft ? `
+    <button class="history-item active">
+      <div class="row1"><span>${escapeHtml(quote.quoteNumber)}</span><span class="pill" style="color:#b45309">Unsaved</span></div>
+      <p class="client">${escapeHtml(quote.clientName) || 'New invoice'}</p>
+      <p class="meta">Due ${displayDate(quote.validUntil)} · ${money.format(totals.total)}</p>
+    </button>` : '';
+  if (!db.invoices.length && !unsavedDraft) {
+    wrap.innerHTML = '<div class="history-empty">Click “New invoice”, or open a saved quote and click “Make invoice”.</div>';
     return;
   }
-  wrap.innerHTML = db.invoices.map((entry) => {
+  wrap.innerHTML = draftCard + db.invoices.map((entry) => {
     const status = effectiveStatus(entry);
     return `
-    <button class="history-item ${entry.id === quote.id ? 'active' : ''}" data-openinv="${entry.id}">
-      <div class="row1"><span>${escapeHtml(entry.quoteNumber)}</span><span class="pill" style="color:${STATUS_COLORS[status]}">${status}</span></div>
+    <button class="history-item ${entry.id === quote.id ? 'active' : ''}" data-open="${entry.id}">
+      <div class="row1"><span>${escapeHtml(entry.quoteNumber)}</span><span><span class="pill" style="color:${STATUS_COLORS[status]}">${status}</span><span class="delx" data-del="${entry.id}" title="Delete invoice">✕</span></span></div>
       <p class="client">${escapeHtml(entry.clientName)}</p>
       <p class="meta">Due ${displayDate(entry.validUntil)} · ${money.format(entry.total ?? 0)}</p>
     </button>`;
   }).join('');
-  wrap.querySelectorAll('[data-openinv]').forEach((el) => el.addEventListener('click', () => openQuote(el.dataset.openinv)));
+  wireHistoryList(wrap, 'invoice');
 }
 
 function renderCustomerPicker() {
@@ -4146,6 +4205,7 @@ function renderForm() {
 function renderTotals() {
   const totals = quoteTotals();
   $('totalInline').textContent = money.format(totals.total);
+  if (isInvoice() && !quote.id) renderInvoiceList();
 }
 
 function renderPreview() {
@@ -4479,6 +4539,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   $('btnSaveQuote').addEventListener('click', saveQuote);
   $('btnNewQuote').addEventListener('click', startNewQuote);
+  $('btnNewInvoice').addEventListener('click', startNewInvoice);
   $('btnSaveOutput').addEventListener('click', saveToOutputs);
 
   // --- invoice extras ---
