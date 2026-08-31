@@ -223,8 +223,7 @@
     <button class="btn ghost onnavy" id="btnCatalogTop">📚 Saved items</button>
     <button class="btn ghost onnavy icon" id="btnSettings" title="Business, appearance & data settings">⚙</button>
     <button class="btn ghost onnavy icon" id="btnCloud" title="Google Drive backup">☁</button>
-    <button class="btn ghost onnavy" id="btnSaveOutput" title="Save this quote into your Outputs folder">📁 <span>Save to Outputs</span></button>
-    <button class="btn white" id="btnPrint">🖨 <span>Print / PDF</span></button>
+    <button class="btn white" id="btnSaveOutput" title="Save this quote as a PDF to your Outputs folder and Google Drive">📁 <span>Save to Outputs</span></button>
   </div>
 </header>
 
@@ -725,7 +724,8 @@ function sanitizeFileName(value) {
 }
 function quoteFileBase() {
   const project = quote.projectName.trim() || quote.clientName.trim() || 'Quote';
-  return sanitizeFileName(`${project} - ${quote.quoteNumber.trim() || 'draft'}`);
+  const datePrefix = (quote.issueDate || isoDate()).replace(/-/g, '').slice(2); // e.g. 260831
+  return sanitizeFileName(`${datePrefix}_${project} - ${quote.quoteNumber.trim() || 'draft'}`);
 }
 
 function buildQuoteDocument(title) {
@@ -1774,10 +1774,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   $('btnSaveQuote').addEventListener('click', saveQuote);
   $('btnNewQuote').addEventListener('click', startNewQuote);
-  $('btnPrint').addEventListener('click', () => window.print());
   $('btnSaveOutput').addEventListener('click', saveToOutputs);
 
-  // Name the PDF automatically: browsers use the page title as the suggested
+  // Printing still works via Ctrl+P — the page title becomes the suggested
   // filename when saving as PDF from the print dialog.
   let titleBeforePrint = document.title;
   window.addEventListener('beforeprint', () => { titleBeforePrint = document.title; document.title = quoteFileBase(); });
