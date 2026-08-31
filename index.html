@@ -1470,6 +1470,7 @@ function renderLineItems() {
       renderCategories(); renderLineItems(); renderCatalogList();
     });
   });
+  if (typeof applySpellcheck === 'function') applySpellcheck();
 }
 
 function renderForm() {
@@ -1670,6 +1671,22 @@ function renderLogoUi() {
   $('btnRemoveLogo').hidden = !has;
 }
 
+/* =================== spellcheck =================== */
+const NO_SPELLCHECK_IDS = new Set([
+  'fQuoteNumber', 'fClientEmail', 'fClientPhone',
+  'sQuotePrefix', 'sEmail', 'sPhone', 'sDriveClientId',
+  'sPrimaryColorText', 'sAccentColorText', 'sBackgroundColorText',
+  'cEmail', 'cPhone',
+]);
+function applySpellcheck() {
+  document.querySelectorAll('input, textarea').forEach((el) => {
+    const isTextInput = el.tagName === 'TEXTAREA' || !el.type || el.type === 'text' || el.type === 'search';
+    const off = NO_SPELLCHECK_IDS.has(el.id) || el.dataset.field === 'unit';
+    el.spellcheck = isTextInput && !off;
+    el.lang = 'en';
+  });
+}
+
 function renderAll() {
   applyTheme();
   renderForm();
@@ -1682,6 +1699,7 @@ function renderAll() {
   renderCustomerList();
   renderCatalogList();
   renderSettingsForm();
+  applySpellcheck();
 }
 
 /* =================== logo upload =================== */
