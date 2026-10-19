@@ -143,6 +143,14 @@
   .line-no { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; flex: none; border-radius: .4rem; background: var(--navy); font-size: 10px; font-weight: 700; color: #fff; }
   .line-grid { display: grid; gap: .5rem; grid-template-columns: 1fr .8fr .8fr 1fr; }
   @media (max-width: 560px) { .line-grid { grid-template-columns: 1fr 1fr; } }
+  .attach-box { margin-top: 1.25rem; border: 1px dashed var(--border); border-radius: .75rem; padding: .75rem; background: color-mix(in srgb, var(--desk) 40%, white); }
+  .attach-box.drag { border-color: var(--navy); background: color-mix(in srgb, var(--copper-soft) 60%, white); }
+  .attach-row { display: flex; align-items: center; gap: .6rem; padding: .5rem 0; border-top: 1px solid var(--border); }
+  .attach-row:first-child { border-top: 0; }
+  .attach-thumb { width: 44px; height: 44px; flex: none; border-radius: .35rem; border: 1px solid var(--border); object-fit: cover; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+  .attach-empty { font-size: .75rem; color: var(--muted-fg); padding: .35rem 0; }
+  .paper-attach { margin-top: 1.25rem; font-size: .74rem; color: var(--muted-fg); }
+  .paper-attach b { color: var(--navy); }
   .line-foot { display: flex; align-items: center; justify-content: space-between; margin-top: .75rem; border-top: 1px solid var(--border); padding-top: .5rem; }
   .line-amt { font-family: ui-monospace, Consolas, monospace; font-size: .9rem; font-weight: 700; color: var(--navy); }
 
@@ -269,12 +277,12 @@
 
 <div class="layout">
   <aside class="sidebar">
-    <button class="btn outline" id="btnNewQuote" style="width:100%; justify-content:flex-start; margin-bottom:1rem;">＋ New quote</button>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem;">
       <button class="btn outline sm" id="btnCustomersSide">👥 Customers</button>
       <button class="btn outline sm" id="btnCatalogSide">📚 Items</button>
     </div>
-    <p class="side-head">Recent quotes</p>
+    <p class="side-head">Quotes</p>
+    <button class="btn outline" id="btnNewQuote" style="width:100%; justify-content:flex-start; margin-bottom:.5rem;">＋ New quote</button>
     <div class="history" id="historyList"></div>
     <p class="side-head">Invoices</p>
     <button class="btn outline" id="btnNewInvoice" style="width:100%; justify-content:flex-start; margin-bottom:.5rem;">＋ New invoice</button>
@@ -341,6 +349,18 @@
     <div id="lineItems"></div>
     <datalist id="categoryList"></datalist>
     <button class="btn outline" id="btnAddLine" style="width:100%; border-style:dashed; margin-top:.25rem;">＋ Add line item</button>
+
+    <div class="attach-box" id="attachBox">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:.75rem; margin-bottom:.4rem;">
+        <div>
+          <h2 style="font-size:1rem; font-weight:700; color:var(--navy);">Receipts &amp; attachments</h2>
+          <p style="font-size:.75rem; color:var(--muted-fg);">Photos or PDFs of receipts. They're added as pages at the end of the PDF you save or email. Drag files here or use the button.</p>
+        </div>
+        <button class="btn outline sm" id="btnAttach">📎 Attach receipt</button>
+      </div>
+      <input type="file" id="attachFile" accept="image/*,application/pdf" multiple hidden>
+      <div id="attachList"></div>
+    </div>
 
     <div style="display:grid; grid-template-columns:1fr 150px; gap:1rem; margin-top:1.5rem;">
       <label><span class="field-label">Notes / terms</span><textarea class="textarea" id="fNotes" placeholder="Scope details, scheduling, or terms…"></textarea></label>
@@ -53576,7 +53596,7 @@ function freshQuote(sequence, settings) {
     status: 'Draft', customerId: '',
     clientName: '', clientEmail: '', clientPhone: '', clientAddress: '',
     projectName: '', issueDate: isoDate(), validUntil: isoDate(30),
-    notes: settings.defaultTerms, taxRate: 0, items: [blankLine()],
+    notes: settings.defaultTerms, taxRate: 0, items: [blankLine()], attachments: [],
   };
 }
 
@@ -53798,9 +53818,11 @@ function pdfMix(hex, amount, base) { // amount of color, mixed toward base (0=bl
   return [mix(n >> 16 & 255), mix(n >> 8 & 255), mix(n & 255)];
 }
 function pdfSafe(text) {
-  return String(text ?? '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
-    .replace(/[–—]/g, '-').replace(/•/g, '-').replace(/\s+/g, ' ')
-    .replace(/[^\x20-\x7E\xA0-\xFF]/g, '?').trim();
+  return String(text ?? '').replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"')
+    .replace(/\s*(?:→|⇒|➔|➜|->)\s*/g, ' to ').replace(/\s*(?:←|<-)\s*/g, ' from ')
+    .replace(/\s*[–—]\s*/g, ' - ').replace(/\s*[·•]\s*/g, ' - ').replace(/…/g, '...')
+    .replace(/[✓✔]/g, '').replace(/×/g, 'x').replace(/\s+/g, ' ')
+    .replace(/[^\x20-\x7E\xC0-\xFF]/g, '').trim();
 }
 function pdfWrap(font, text, size, maxWidth) {
   const lines = [];
@@ -54020,6 +54042,36 @@ async function makeQuotePdf() {
     }
   }
 
+  /* ---- receipts & attachments ---- */
+  const attachCount = docAttachments().length;
+  if (attachCount) {
+    if (y - 40 < M) newPage(); else y -= 22;
+    text(`RECEIPTS ATTACHED: ${attachCount}`, M, y, { font: bold, size: 7, color: copperDark });
+    y -= 12;
+    const listRows = [];
+    docAttachments().forEach((att, i) => {
+      if (y - 12 < M) newPage();
+      const forItem = attachmentItemName(att);
+      const line = `${i + 1}. ${att.name}${forItem ? ' - for ' + forItem : ''}`;
+      text(line, M, y, { size: 8, color: copperDark });
+      listRows.push({ page, x: M, y: y - 2, w: helv.widthOfTextAtSize(pdfSafe(line), 8), h: 11 });
+      y -= 11;
+    });
+    text('Click a receipt to jump to it. The original files are also attached to this PDF and the email.', M, y - 2, { size: 7.5, color: gray });
+    const receiptPages = await appendAttachmentPages(doc, { helv, bold }, { navy, gray, copperDark });
+    const { PDFName } = window.PDFLib;
+    listRows.forEach((row, i) => {
+      const target = receiptPages[i];
+      if (!target) return;
+      const ref = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Link', Rect: [row.x, row.y, row.x + row.w, row.y + row.h], Border: [0, 0, 0],
+        Dest: [target.ref, 'Fit'],
+      }));
+      const existing = row.page.node.lookup(PDFName.of('Annots'));
+      if (existing) existing.push(ref); else row.page.node.set(PDFName.of('Annots'), doc.context.obj([ref]));
+    });
+  }
+
   return doc.save();
 }
 
@@ -54079,6 +54131,12 @@ async function saveToOutputs() {
         const writable = await handle.createWritable();
         await writable.write(doc);
         await writable.close();
+        for (const [i, att] of docAttachments().entries()) {
+          const receiptHandle = await outputsHandle.getFileHandle(receiptFileName(att, i), { create: true });
+          const receiptWritable = await receiptHandle.createWritable();
+          await receiptWritable.write(dataUrlBytes(att.dataUrl));
+          await receiptWritable.close();
+        }
         destinations.push(outputsHandle.name);
       } else {
         toast('Outputs folder permission was not granted', 'err');
@@ -54260,7 +54318,7 @@ function emailDefaults() {
   const due = amountDueNow();
   const totals = quoteTotals();
   const word = docWord(true);
-  const subject = `${word} ${quote.quoteNumber}${quote.projectName ? ' — ' + quote.projectName : ''}${settings.businessName ? ' — ' + settings.businessName : ''}`;
+  const subject = `${word} ${quote.quoteNumber}${quote.projectName ? ' - ' + quote.projectName : ''}${settings.businessName ? ' - ' + settings.businessName : ''}`;
   const lines = [];
   const firstName = (quote.clientName || '').split(/[\s,]+/)[0];
   lines.push(`Hi${firstName ? ' ' + firstName : ''},`);
@@ -54274,6 +54332,11 @@ function emailDefaults() {
       lines.push(`Amount due: ${money.format(due)}.`);
     }
     lines.push(`Due date: ${displayDate(quote.validUntil)}.`);
+    const receiptCount = docAttachments().length;
+    if (receiptCount) {
+      lines.push('');
+      lines.push(`${receiptCount} receipt${receiptCount === 1 ? ' is' : 's are'} attached for the reimbursed expenses, as separate files and inside the invoice PDF.`);
+    }
     const methods = paymentMethods();
     if (methods.length) {
       lines.push('');
@@ -54281,7 +54344,7 @@ function emailDefaults() {
       for (const method of methods) lines.push(`- ${method.title}: ${method.url || method.detail}`);
     }
   } else {
-    lines.push(`Please find attached quote ${quote.quoteNumber}${quote.projectName ? ' for ' + quote.projectName : ''} — ${money.format(totals.total)}, valid until ${displayDate(quote.validUntil)}.`);
+    lines.push(`Please find attached quote ${quote.quoteNumber}${quote.projectName ? ' for ' + quote.projectName : ''}: ${money.format(totals.total)}, valid until ${displayDate(quote.validUntil)}.`);
     lines.push('');
     lines.push('Happy to answer any questions or adjust the scope.');
   }
@@ -54344,6 +54407,17 @@ async function sendDocEmail() {
       `Content-Disposition: attachment; filename="${fileName}"`,
       '',
       bytesToB64(pdfBytes).replace(/(.{76})/g, '$1\r\n'),
+      ...docAttachments().flatMap((att, i) => {
+        const receiptName = receiptFileName(att, i);
+        return [
+          `--${boundary}`,
+          `Content-Type: ${att.type}; name="${receiptName}"`,
+          'Content-Transfer-Encoding: base64',
+          `Content-Disposition: attachment; filename="${receiptName}"`,
+          '',
+          (att.dataUrl.split(',')[1] || '').replace(/(.{76})/g, '$1\r\n'),
+        ];
+      }),
       `--${boundary}--`,
     ].join('\r\n');
     const raw = btoa(unescape(encodeURIComponent(mime))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -54838,6 +54912,176 @@ function renderLineItems() {
   if (typeof applySpellcheck === 'function') applySpellcheck();
 }
 
+/* =================== receipts & attachments =================== */
+const ATTACH_MAX_PX = 1700;      // longest side for stored receipt photos
+const ATTACH_PDF_WARN = 4 * 1024 * 1024;
+function docAttachments() { if (!Array.isArray(quote.attachments)) quote.attachments = []; return quote.attachments; }
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error || new Error('read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+async function compressImageDataUrl(dataUrl) {
+  // Shrink phone photos so invoices stay small; output JPEG.
+  const img = await new Promise((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el); el.onerror = () => reject(new Error('image load failed'));
+    el.src = dataUrl;
+  });
+  const scale = Math.min(1, ATTACH_MAX_PX / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.naturalWidth * scale); canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return { dataUrl: canvas.toDataURL('image/jpeg', 0.82), width: canvas.width, height: canvas.height };
+}
+function dataUrlBytes(dataUrl) {
+  const raw = atob(dataUrl.split(',')[1] || '');
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+function attachmentSizeLabel(att) {
+  const kb = Math.round(((att.dataUrl || '').length * 0.75) / 1024);
+  return kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB';
+}
+async function addAttachmentFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  let added = 0;
+  for (const file of files) {
+    try {
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      const isImage = /^image\//.test(file.type);
+      if (!isPdf && !isImage) { toast(`${file.name}: only images or PDFs can be attached`, 'err'); continue; }
+      let dataUrl = await readAsDataUrl(file);
+      let type = isPdf ? 'application/pdf' : 'image/jpeg';
+      if (isImage) dataUrl = (await compressImageDataUrl(dataUrl)).dataUrl;
+      if (isPdf && file.size > ATTACH_PDF_WARN && !confirm(`${file.name} is ${(file.size / 1048576).toFixed(1)} MB. Large PDFs make the invoice heavy to email. Attach anyway?`)) continue;
+      const label = file.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim() || 'Receipt';
+      docAttachments().push({ id: uuid(), name: label, fileName: file.name, type, itemId: '', addedAt: new Date().toISOString(), dataUrl });
+      added++;
+    } catch (err) {
+      console.warn('attach failed', err);
+      toast(`Could not attach ${file.name}`, 'err');
+    }
+  }
+  if (added) {
+    patchQuote({});
+    renderAttachments(); renderPreview();
+    toast(`Attached ${added} file${added === 1 ? '' : 's'}. Remember to Save.`);
+  }
+}
+function openAttachment(att) {
+  const blob = new Blob([dataUrlBytes(att.dataUrl)], { type: att.type });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function renderAttachments() {
+  const wrap = $('attachList');
+  if (!wrap) return;
+  const list = docAttachments();
+  if (!list.length) { wrap.innerHTML = '<div class="attach-empty">No receipts attached.</div>'; return; }
+  const itemOptions = (selected) => ['<option value="">Not linked to a line item</option>',
+    ...quote.items.filter((item) => item.name.trim()).map((item) => `<option value="${item.id}" ${item.id === selected ? 'selected' : ''}>For: ${escapeHtml(item.name)}</option>`)].join('');
+  wrap.innerHTML = list.map((att) => `
+    <div class="attach-row" data-att="${att.id}">
+      ${att.type === 'application/pdf' ? '<div class="attach-thumb">📄</div>' : `<img class="attach-thumb" src="${att.dataUrl}" alt="">`}
+      <div style="flex:1; min-width:0; display:grid; gap:.3rem;">
+        <input class="input" data-field="name" value="${escapeHtml(att.name)}" placeholder="Receipt label" style="padding:.3rem .5rem; font-size:.8rem;">
+        <div style="display:flex; gap:.4rem; align-items:center;">
+          <select class="select" data-field="itemId" style="flex:1; min-width:0; padding:.25rem .4rem; font-size:.75rem;">${itemOptions(att.itemId)}</select>
+          <span style="font-size:.68rem; color:var(--muted-fg); white-space:nowrap;">${att.type === 'application/pdf' ? 'PDF' : 'Image'}, ${attachmentSizeLabel(att)}</span>
+        </div>
+      </div>
+      <button class="btn ghost icon" data-field="view" title="Open">👁</button>
+      <button class="btn ghost icon" data-field="remove" title="Remove attachment">🗑</button>
+    </div>`).join('');
+  wrap.querySelectorAll('.attach-row').forEach((row) => {
+    const find = () => docAttachments().find((entry) => entry.id === row.dataset.att);
+    row.querySelector('[data-field="name"]').addEventListener('input', (event) => { find().name = event.target.value; patchQuote({}); renderPreview(); });
+    row.querySelector('[data-field="itemId"]').addEventListener('change', (event) => { find().itemId = event.target.value; patchQuote({}); renderPreview(); });
+    row.querySelector('[data-field="view"]').addEventListener('click', () => openAttachment(find()));
+    row.querySelector('[data-field="remove"]').addEventListener('click', () => {
+      const att = find();
+      if (!confirm(`Remove “${att.name}” from this ${docWord()}?`)) return;
+      quote.attachments = docAttachments().filter((entry) => entry.id !== att.id);
+      patchQuote({});
+      renderAttachments(); renderPreview();
+    });
+  });
+}
+function receiptFileName(att, index) {
+  const ext = att.type === 'application/pdf' ? 'pdf' : 'jpg';
+  const label = pdfSafe(att.name).replace(/[\\/:*?"<>|$()]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Receipt';
+  return `${quote.quoteNumber} Receipt ${index + 1} - ${label}.${ext}`;
+}
+function attachmentItemName(att) {
+  const item = att.itemId && quote.items.find((entry) => entry.id === att.itemId);
+  return item ? item.name : '';
+}
+function attachmentsPreviewHtml() {
+  const list = docAttachments();
+  if (!list.length) return '';
+  return `<div class="paper-attach"><p class="document-label" style="margin-bottom:.35rem;">Receipts attached: ${list.length}</p>
+    ${list.map((att, i) => `<div>${i + 1}. <a href="#" data-open-att="${att.id}" style="color:var(--navy); font-weight:700;">${escapeHtml(att.name)}</a>${attachmentItemName(att) ? ' - for ' + escapeHtml(attachmentItemName(att)) : ''}</div>`).join('')}
+    <div style="margin-top:.3rem; font-style:italic;">Included as pages at the end of the PDF, and as downloadable files.</div></div>`;
+}
+async function appendAttachmentPages(doc, fonts, colors) {
+  const list = docAttachments();
+  const firstPages = [];
+  if (!list.length) return firstPages;
+  const { PDFDocument } = window.PDFLib;
+  const { helv, bold } = fonts; const { navy, gray, copperDark } = colors;
+  const W = 612, H = 792, M = 40;
+  const label = (page, att, index, onTop) => {
+    const forItem = attachmentItemName(att);
+    const line = pdfSafe(`Receipt ${index + 1} of ${list.length}: ${att.name}${forItem ? ' - for ' + forItem : ''} - ${quote.quoteNumber}`);
+    const size = 7.5;
+    const { width, height } = page.getSize();
+    page.drawText(line.slice(0, 140), { x: M, y: onTop ? height - 26 : 12, size, font: bold, color: onTop ? copperDark : gray });
+  };
+  for (let i = 0; i < list.length; i++) {
+    const att = list[i];
+    try {
+      if (att.type === 'application/pdf') {
+        const src = await PDFDocument.load(dataUrlBytes(att.dataUrl), { ignoreEncryption: true });
+        const pages = await doc.copyPages(src, src.getPageIndices());
+        pages.forEach((p, n) => { doc.addPage(p); label(p, att, i, false); if (n === 0) firstPages[i] = p; });
+      } else {
+        const jpg = await compressImageDataUrl(att.dataUrl);
+        const image = await doc.embedJpg(dataUrlBytes(jpg.dataUrl));
+        const page = doc.addPage([W, H]);
+        firstPages[i] = page;
+        label(page, att, i, true);
+        page.drawRectangle({ x: M, y: H - 34, width: W - 2 * M, height: 1, color: navy });
+        const maxW = W - 2 * M, maxH = H - 2 * M - 20;
+        const scale = Math.min(maxW / jpg.width, maxH / jpg.height, 1.6);
+        const w = jpg.width * scale, h = jpg.height * scale;
+        page.drawImage(image, { x: (W - w) / 2, y: H - 46 - h, width: w, height: h });
+      }
+    } catch (err) {
+      console.warn('attachment page failed', err);
+      const page = doc.addPage([W, H]);
+      firstPages[i] = page;
+      label(page, att, i, true);
+      page.drawText(pdfSafe('This attachment could not be added to the PDF (' + (att.fileName || att.name) + ').'), { x: M, y: H - 70, size: 10, font: helv, color: gray });
+    }
+    // Also embed the original file so it can be downloaded from the PDF.
+    try {
+      await doc.attach(dataUrlBytes(att.dataUrl), receiptFileName(att, i), {
+        mimeType: att.type, description: pdfSafe(att.name), creationDate: new Date(att.addedAt || Date.now()), modificationDate: new Date(),
+      });
+    } catch (err) { console.warn('embedding attachment failed', err); }
+  }
+  return firstPages;
+}
+
 function renderForm() {
   const invoice = isInvoice();
   $('docTitle').textContent = invoice ? 'Edit your invoice' : 'Build your quote';
@@ -54931,7 +55175,13 @@ function renderPreview() {
       <p class="lead">Thank you for the opportunity.</p>
       <p class="body">${escapeHtml(quote.notes || settings.defaultTerms)}</p>
     </div>
-    ${paymentBoxHtml()}`;
+    ${paymentBoxHtml()}
+    ${attachmentsPreviewHtml()}`;
+  $('quotePaper').querySelectorAll('[data-open-att]').forEach((el) => el.addEventListener('click', (event) => {
+    event.preventDefault();
+    const att = docAttachments().find((entry) => entry.id === el.dataset.openAtt);
+    if (att) openAttachment(att);
+  }));
 }
 
 function paymentBoxHtml() {
@@ -55403,6 +55653,7 @@ function renderAll() {
   applyTheme();
   renderForm();
   renderLineItems();
+  renderAttachments();
   renderTotals();
   renderPreview();
   renderHistory();
@@ -55502,6 +55753,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     patchQuote({ items: [...quote.items, blankLine()] });
     renderLineItems(); renderPreview(); renderTotals();
   });
+  $('btnAttach').addEventListener('click', () => $('attachFile').click());
+  $('attachFile').addEventListener('change', async (event) => { await addAttachmentFiles(event.target.files); event.target.value = ''; });
+  const attachBox = $('attachBox');
+  ['dragenter', 'dragover'].forEach((type) => attachBox.addEventListener(type, (event) => { event.preventDefault(); attachBox.classList.add('drag'); }));
+  ['dragleave', 'drop'].forEach((type) => attachBox.addEventListener(type, (event) => { event.preventDefault(); attachBox.classList.remove('drag'); }));
+  attachBox.addEventListener('drop', (event) => addAttachmentFiles(event.dataTransfer && event.dataTransfer.files));
   $('btnSaveQuote').addEventListener('click', saveQuote);
   $('btnNewQuote').addEventListener('click', startNewQuote);
   $('btnNewInvoice').addEventListener('click', startNewInvoice);
