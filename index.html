@@ -120,6 +120,12 @@
   .history-item .row1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: .25rem; font-size: .72rem; font-weight: 600; }
   .history-item .pill { border-radius: 999px; background: #fff; padding: .1rem .5rem; font-size: 10px; color: #047857; }
   .history-item .delx { margin-left: .35rem; padding: .05rem .3rem; border-radius: .3rem; color: var(--muted-fg); font-size: 11px; }
+  .history-item .paidx { margin-left: .35rem; padding: .05rem .3rem; border-radius: .3rem; color: var(--muted-fg); font-size: 11px; }
+  .history-item .paidx:hover { background: #d1fae5; color: #047857; }
+  .unpaid-sum { margin: -.35rem 0 .6rem; padding: 0 .5rem; font-size: 11px; color: var(--muted-fg); }
+  .unpaid-sum b { color: var(--navy); }
+  .paid-stamp { display: inline-block; margin-top: .4rem; border: 2px solid #047857; color: #047857; border-radius: .35rem; padding: .1rem .55rem; font-weight: 800; font-size: .95rem; letter-spacing: .12em; transform: rotate(-4deg); }
+  .btn.paid-on { border-color: #047857; color: #047857; }
   .history-item .delx:hover { background: #fee2e2; color: #b91c1c; }
   .history-item .client { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; font-weight: 600; color: var(--navy); }
   .history-item .meta { margin-top: .25rem; font-size: .72rem; color: var(--muted-fg); }
@@ -285,6 +291,7 @@
     <button class="btn outline" id="btnNewQuote" style="width:100%; justify-content:flex-start; margin-bottom:.5rem;">＋ New quote</button>
     <div class="history" id="historyList"></div>
     <p class="side-head">Invoices</p>
+    <p class="unpaid-sum" id="unpaidSum"></p>
     <button class="btn outline" id="btnNewInvoice" style="width:100%; justify-content:flex-start; margin-bottom:.5rem;">＋ New invoice</button>
     <div class="history" id="invoiceList"></div>
   </aside>
@@ -336,6 +343,10 @@
         <label><span class="field-label">PayPal invoice link <span style="font-weight:400; color:var(--muted-fg);">(optional — replaces the PayPal.me button)</span></span>
           <input class="input" id="fPaypalInvoiceLink" placeholder="https://www.paypal.com/invoice/p/#..."></label>
       </div>
+      <div class="grid2" id="paidFields" hidden style="grid-template-columns:150px 1fr; margin-top:.6rem;">
+        <label><span class="field-label">Paid on</span><input type="date" class="input" id="fPaidDate"></label>
+        <label><span class="field-label">Payment note <span style="font-weight:400; color:var(--muted-fg);">(optional, e.g. Check 1042, Zelle, PayPal)</span></span><input class="input" id="fPaidNote" placeholder="How it was paid"></label>
+      </div>
       <p style="font-size:.72rem; color:var(--muted-fg); margin-top:.5rem;">Deposit 0% = full amount due. From <b id="quoteRefNote"></b>.</p>
     </div>
 
@@ -376,6 +387,7 @@
       <p style="font-size:.75rem; color:var(--muted-fg);">Total <span id="totalInline" class="mono" style="margin-left:.25rem; font-weight:700; color:var(--navy);">$0.00</span></p>
       <div style="display:flex; gap:.5rem; flex-wrap:wrap; justify-content:flex-end;">
         <button class="btn outline lg" id="btnConvert" hidden>🧾 Make invoice</button>
+        <button class="btn outline lg" id="btnMarkPaid" hidden>✓ Mark paid</button>
         <button class="btn outline lg" id="btnEmail">✉ Email</button>
         <button class="btn copper lg" id="btnSaveQuote">💾 <span id="btnSaveLabel">Save quote</span></button>
       </div>
@@ -53916,6 +53928,12 @@ async function makeQuotePdf() {
   // right block
   rightText(isInvoice() ? 'INVOICE' : 'QUOTE', W - M, headerTop - 24, { font: bold, size: 30 });
   rightText('#  ' + quote.quoteNumber, W - M, headerTop - 40, { font: bold, size: 11, color: copperDark });
+  if (isInvoice() && isPaid()) {
+    const green = rgb(0.016, 0.47, 0.34);
+    const stampW = bold.widthOfTextAtSize('PAID', 16) + 18;
+    page.drawRectangle({ x: W - M - stampW - 150, y: headerTop - 46, width: stampW, height: 24, borderColor: green, borderWidth: 2 });
+    page.drawText('PAID', { x: W - M - stampW - 141, y: headerTop - 40, size: 16, font: bold, color: green });
+  }
   const issuedLine = 'Issued ' + displayDate(quote.issueDate) + (isInvoice() && quote.quoteRef ? '  ·  per quote ' + quote.quoteRef : '');
   rightText(issuedLine, W - M, headerTop - 54, { size: 8, color: gray });
   y = Math.min(y, headerTop - 62) - 12;
@@ -53995,8 +54013,21 @@ async function makeQuotePdf() {
   for (const line of noteLines) { text(line, M + 14, ny, { size: 8.5 }); ny -= 11; }
   y -= boxH;
 
-  /* ---- payment options (invoices only) ---- */
-  if (isInvoice()) {
+  /* ---- paid confirmation (paid invoices) ---- */
+  if (isInvoice() && isPaid()) {
+    const green = rgb(0.016, 0.47, 0.34);
+    const paidLine = `Paid in full on ${displayDate(quote.paidDate || isoDate())}${quote.paidNote ? ' - ' + quote.paidNote : ''}. Balance due: ${money.format(0)}. Thank you!`;
+    const lines = pdfWrap(helv, paidLine, 9, W - 2 * M - 28);
+    const boxH = 22 + lines.length * 12;
+    if (y - 16 - boxH < M) newPage(); else y -= 16;
+    page.drawRectangle({ x: M, y: y - boxH, width: W - 2 * M, height: boxH, borderColor: green, borderWidth: 1.2 });
+    let py = y - 16;
+    for (const line of lines) { text(line, M + 14, py, { font: bold, size: 9, color: green }); py -= 12; }
+    y -= boxH;
+  }
+
+  /* ---- payment options (unpaid invoices only) ---- */
+  if (isInvoice() && !isPaid()) {
     const methods = paymentMethods();
     if (methods.length) {
       const addLink = (targetPage, x1, y1, w1, h1, url) => {
@@ -54324,20 +54355,24 @@ function emailDefaults() {
   lines.push(`Hi${firstName ? ' ' + firstName : ''},`);
   lines.push('');
   if (isInvoice()) {
-    lines.push(`Please find attached invoice ${quote.quoteNumber}${quote.projectName ? ' for ' + quote.projectName : ''}.`);
+    lines.push(isPaid()
+      ? `Please find attached the paid receipt for invoice ${quote.quoteNumber}${quote.projectName ? ' for ' + quote.projectName : ''}.`
+      : `Please find attached invoice ${quote.quoteNumber}${quote.projectName ? ' for ' + quote.projectName : ''}.`);
     lines.push('');
-    if ((Number(quote.depositPercent) || 0) > 0) {
+    if (isPaid()) {
+      lines.push(`Paid in full on ${displayDate(quote.paidDate || isoDate())}: ${money.format(quoteTotals().total)}. Thank you!`);
+    } else if ((Number(quote.depositPercent) || 0) > 0) {
       lines.push(`Deposit due now (${Number(quote.depositPercent)}%): ${money.format(due)} of ${money.format(totals.total)} total.`);
     } else {
       lines.push(`Amount due: ${money.format(due)}.`);
     }
-    lines.push(`Due date: ${displayDate(quote.validUntil)}.`);
+    if (!isPaid()) lines.push(`Due date: ${displayDate(quote.validUntil)}.`);
     const receiptCount = docAttachments().length;
     if (receiptCount) {
       lines.push('');
       lines.push(`${receiptCount} receipt${receiptCount === 1 ? ' is' : 's are'} attached for the reimbursed expenses, as separate files and inside the invoice PDF.`);
     }
-    const methods = paymentMethods();
+    const methods = isPaid() ? [] : paymentMethods();
     if (methods.length) {
       lines.push('');
       lines.push('Ways to pay:');
@@ -54780,6 +54815,45 @@ function renderHistory() {
   renderInvoiceList();
 }
 
+/* =================== paid status =================== */
+function isPaid(entry) { return (entry || quote).status === 'Paid'; }
+function markInvoicePaid(paid, opts = {}) {
+  if (!isInvoice()) return;
+  if (paid) {
+    quote.status = 'Paid';
+    quote.paidDate = opts.paidDate || quote.paidDate || isoDate();
+    if (opts.paidNote !== undefined) quote.paidNote = opts.paidNote;
+  } else {
+    quote.status = 'Sent';
+    quote.paidDate = '';
+  }
+  renderForm(); renderPreview();
+  if (quote.clientName.trim() && quote.items.some((item) => item.name.trim())) {
+    saveQuote();
+    toast(paid ? `${quote.quoteNumber} marked paid on ${displayDate(quote.paidDate)}` : `${quote.quoteNumber} marked unpaid`);
+  } else {
+    setNotice('Unsaved changes - save the invoice to keep the status');
+  }
+}
+function quickMarkPaid(id) {
+  const entry = db.invoices.find((item) => item.id === id);
+  if (!entry || entry.status === 'Paid') return;
+  if (!confirm(`Mark ${entry.quoteNumber} (${entry.clientName}, ${money.format(entry.total ?? 0)}) as paid today?`)) return;
+  entry.status = 'Paid';
+  entry.paidDate = isoDate();
+  entry.updatedAt = new Date().toISOString();
+  if (quote.id === id) { quote.status = 'Paid'; quote.paidDate = entry.paidDate; }
+  persist(`${entry.quoteNumber} marked paid`);
+  renderAll();
+  toast(`${entry.quoteNumber} marked paid`);
+}
+function unpaidSummary() {
+  const open = db.invoices.filter((entry) => entry.status !== 'Paid');
+  const total = open.reduce((sum, entry) => sum + (Number(entry.total) || 0), 0);
+  const overdue = open.filter((entry) => effectiveStatus(entry) === 'Overdue').length;
+  return { count: open.length, total, overdue };
+}
+
 const STATUS_COLORS = { Draft: '#6b7280', Sent: '#b45309', Paid: '#047857', Overdue: '#b91c1c' };
 function renderInvoiceList() {
   const wrap = $('invoiceList');
@@ -54793,18 +54867,26 @@ function renderInvoiceList() {
     </button>` : '';
   if (!db.invoices.length && !unsavedDraft) {
     wrap.innerHTML = '<div class="history-empty">Click “New invoice”, or open a saved quote and click “Make invoice”.</div>';
+    if ($('unpaidSum')) $('unpaidSum').textContent = '';
     return;
   }
   wrap.innerHTML = draftCard + db.invoices.map((entry) => {
     const status = effectiveStatus(entry);
     return `
     <button class="history-item ${entry.id === quote.id ? 'active' : ''}" data-open="${entry.id}">
-      <div class="row1"><span>${escapeHtml(entry.quoteNumber)}</span><span><span class="pill" style="color:${STATUS_COLORS[status]}">${status}</span><span class="delx" data-del="${entry.id}" title="Delete invoice">✕</span></span></div>
+      <div class="row1"><span>${escapeHtml(entry.quoteNumber)}</span><span><span class="pill" style="color:${STATUS_COLORS[status]}">${status}</span>${status === 'Paid' ? '' : `<span class="paidx" data-paid="${entry.id}" title="Mark paid">✓</span>`}<span class="delx" data-del="${entry.id}" title="Delete invoice">✕</span></span></div>
       <p class="client">${escapeHtml(entry.clientName)}</p>
-      <p class="meta">Due ${displayDate(entry.validUntil)} · ${money.format(entry.total ?? 0)}</p>
+      <p class="meta">${status === 'Paid' ? 'Paid ' + displayDate(entry.paidDate || entry.updatedAt.slice(0, 10)) : 'Due ' + displayDate(entry.validUntil)} · ${money.format(entry.total ?? 0)}</p>
     </button>`;
   }).join('');
   wireHistoryList(wrap, 'invoice');
+  wrap.querySelectorAll('[data-paid]').forEach((el) => el.addEventListener('click', (event) => {
+    event.stopPropagation();
+    quickMarkPaid(el.dataset.paid);
+  }));
+  const sum = unpaidSummary();
+  const sumEl = $('unpaidSum');
+  if (sumEl) sumEl.innerHTML = sum.count ? `Unpaid: <b>${money.format(sum.total)}</b> on ${sum.count} invoice${sum.count === 1 ? '' : 's'}${sum.overdue ? ` (${sum.overdue} overdue)` : ''}` : 'All invoices paid';
 }
 
 function renderCustomerPicker() {
@@ -55090,9 +55172,15 @@ function renderForm() {
   $('btnSaveLabel').textContent = invoice ? 'Save invoice' : 'Save quote';
   $('invoiceExtras').hidden = !invoice;
   $('btnConvert').hidden = invoice || !quote.id;
+  $('btnMarkPaid').hidden = !invoice;
+  $('btnMarkPaid').textContent = isPaid() ? '↺ Mark unpaid' : '✓ Mark paid';
+  $('btnMarkPaid').classList.toggle('paid-on', !isPaid());
   if (invoice) {
     $('fDepositPercent').value = quote.depositPercent || 0;
     $('fStatus').value = ['Draft', 'Sent', 'Paid'].includes(quote.status) ? quote.status : 'Draft';
+    $('paidFields').hidden = !isPaid();
+    $('fPaidDate').value = quote.paidDate || '';
+    $('fPaidNote').value = quote.paidNote || '';
     $('fPaypalInvoiceLink').value = quote.paypalInvoiceLink || '';
     $('quoteRefNote').textContent = quote.quoteRef ? `quote ${quote.quoteRef}` : 'scratch';
   }
@@ -55135,6 +55223,7 @@ function renderPreview() {
       </div>
       <div style="text-align:right;">
         <p class="paper-title">${isInvoice() ? 'INVOICE' : 'QUOTE'}</p>
+        ${isInvoice() && isPaid() ? `<p class="paid-stamp">PAID</p>` : ''}
         <p class="paper-qnum"># ${escapeHtml(quote.quoteNumber)}</p>
         <p class="paper-issued">Issued ${displayDate(quote.issueDate)}${isInvoice() && quote.quoteRef ? ' · per quote ' + escapeHtml(quote.quoteRef) : ''}</p>
       </div>
@@ -55175,7 +55264,7 @@ function renderPreview() {
       <p class="lead">Thank you for the opportunity.</p>
       <p class="body">${escapeHtml(quote.notes || settings.defaultTerms)}</p>
     </div>
-    ${paymentBoxHtml()}
+    ${isInvoice() && isPaid() ? `<div style="margin-top:1.25rem; border:1.5px solid #047857; border-radius:.5rem; padding:.9rem 1.25rem; color:#047857; font-size:.85rem;"><b>Paid in full</b> on ${displayDate(quote.paidDate || isoDate())}${quote.paidNote ? ' - ' + escapeHtml(quote.paidNote) : ''}. Balance due: ${money.format(0)}. Thank you!</div>` : paymentBoxHtml()}
     ${attachmentsPreviewHtml()}`;
   $('quotePaper').querySelectorAll('[data-open-att]').forEach((el) => el.addEventListener('click', (event) => {
     event.preventDefault();
@@ -55773,8 +55862,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   $('fStatus').addEventListener('change', (event) => {
     quote.status = event.target.value;
-    setNotice('Unsaved changes — save the invoice to keep the status');
+    if (quote.status === 'Paid' && !quote.paidDate) quote.paidDate = isoDate();
+    if (quote.status !== 'Paid') quote.paidDate = '';
+    renderForm(); renderPreview();
+    setNotice('Unsaved changes - save the invoice to keep the status');
   });
+  $('btnMarkPaid').addEventListener('click', () => markInvoicePaid(!isPaid()));
+  $('fPaidDate').addEventListener('input', (event) => { quote.paidDate = event.target.value; setNotice('Unsaved changes'); renderPreview(); });
+  $('fPaidNote').addEventListener('input', (event) => { quote.paidNote = event.target.value; setNotice('Unsaved changes'); renderPreview(); });
   $('fPaypalInvoiceLink').addEventListener('input', (event) => {
     quote.paypalInvoiceLink = event.target.value.trim();
     setNotice('Unsaved changes');
